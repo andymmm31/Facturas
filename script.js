@@ -7,12 +7,19 @@ import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/
 setLogLevel('Debug');
 
 // ====================================================================
-// >>> CONFIGURACIÓN AUTOMÁTICA DEL ENTORNO WEB (Canvas) <<<
+// >>> CONFIGURACIÓN DE FIREBASE PROPORCIONADA POR EL USUARIO <<<
 // ====================================================================
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
+const firebaseConfig = {
+  apiKey: "AIzaSyAY96YjG0s5V_oXmawNxuB_Cyk3dXafbbk",
+  authDomain: "facturas-cbddc.firebaseapp.com",
+  projectId: "facturas-cbddc",
+  storageBucket: "facturas-cbddc.firebasestorage.app",
+  messagingSenderId: "142274543659",
+  appId: "1:142274543659:web:f1e969d2f2dc18d7fd2a6e",
+  measurementId: "G-R4XDV1FGMV"
+};
+const appId = firebaseConfig.appId; // Se extrae para compatibilidad con la función de backend
+const initialAuthToken = null; // No se necesita para el flujo de autenticación anónima
 // ====================================================================
 
 let app, db, auth;
