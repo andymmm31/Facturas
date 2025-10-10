@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Facturas y Reportes</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Estilos personalizados -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        <header class="mb-6 pb-4 border-b border-indigo-200">
+            <h1 class="text-3xl font-extrabold text-indigo-800">Sistema de Gestión de Facturas</h1>
+            <p id="user-id-display" class="text-sm text-gray-500 mt-1">ID de usuario: Cargando...</p>
+        </header>
+
+        <div id="loading-message" class="text-center p-10 text-xl font-semibold text-indigo-600">Cargando...</div>
+
+        <div id="main-content" class="grid grid-cols-1 lg:grid-cols-3 gap-8 hidden">
+
+            <div class="lg:col-span-1 bg-white p-6 rounded-xl card-shadow h-fit">
+                <h2 class="text-2xl font-bold mb-5 text-indigo-700">1. Registrar Factura</h2>
+                <form id="invoice-form" class="space-y-4">
+                    <div>
+                        <label for="company-select" class="block text-sm font-medium text-gray-700">Empresa:</label>
+                        <select id="company-select" required class="w-full input-style"></select>
+                    </div>
+                    <div id="new-company-input-container" class="hidden">
+                         <label for="new-company-input" class="block text-sm font-medium text-gray-700">Nombre Nueva Empresa:</label>
+                         <input type="text" id="new-company-input" class="w-full input-style" placeholder="Nombre completo">
+                    </div>
+                    <div>
+                        <label for="amount-input" class="block text-sm font-medium text-gray-700">Importe (€):</label>
+                        <input type="number" step="0.01" id="amount-input" required class="w-full input-style" placeholder="100.00">
+                    </div>
+                    <div>
+                        <label for="invoice-date-input" class="block text-sm font-medium text-gray-700">Fecha de Factura:</label>
+                        <input type="date" id="invoice-date-input" required class="w-full input-style">
+                    </div>
+                    <div>
+                        <label for="due-date-input" class="block text-sm font-medium text-gray-700">Fecha de Vencimiento:</label>
+                        <input type="date" id="due-date-input" required class="w-full input-style">
+                    </div>
+                    <button type="submit" class="w-full py-3 px-4 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition shadow-md">Guardar Factura</button>
+                    <p id="form-message" class="text-center"></p>
+                </form>
+            </div>
+
+            <div class="lg:col-span-2 bg-white p-6 rounded-xl card-shadow">
+                <h2 class="text-2xl font-bold mb-5 text-indigo-700">2. Reporte Acumulado (Seguro)</h2>
+                <div class="p-6 bg-indigo-50 border-2 border-indigo-200 rounded-xl mb-6">
+                    <div class="space-y-3 sm:flex sm:space-y-0 sm:space-x-4">
+                        <select id="report-company-filter" class="flex-grow input-style"></select>
+                        <input type="password" id="report-password" placeholder="Contraseña (admin)" class="input-style sm:w-1/3">
+                        <button id="calculate-sum-button" class="sm:w-auto py-2 px-4 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600 transition">Calcular</button>
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-indigo-200 space-y-3">
+                        <label for="main-date-filter" class="block text-sm font-medium text-gray-700">Filtro de Fecha:</label>
+                        <select id="main-date-filter" class="input-style w-full">
+                            <option value="none" selected>Sin filtro de fecha</option>
+                            <option value="invoiceDateRange">Rango por Fecha de Factura</option>
+                            <option value="dueDateRange">Rango por Fecha de Vencimiento</option>
+                        </select>
+                        <div id="date-range-inputs" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <input type="date" id="start-date-filter" aria-label="Fecha de inicio" class="input-style w-full">
+                            <input type="date" id="end-date-filter" aria-label="Fecha de fin" class="input-style w-full">
+                        </div>
+                    </div>
+                    <div class="mt-4 flex justify-end">
+                        <button id="export-csv-button" class="py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-lg transition opacity-50 cursor-not-allowed" disabled>Exportar a CSV</button>
+                    </div>
+                    <p id="password-error" class="text-red-500 mt-2 font-medium"></p>
+                    <p id="report-feedback" class="text-center mt-2"></p>
+                </div>
+                <div class="text-center p-8 bg-gray-100 rounded-xl border-dashed border-2 border-gray-300">
+                    <p id="sum-title" class="text-xl font-medium text-gray-700 mb-2">Total Acumulado Global:</p>
+                    <div id="total-sum-display" class="text-5xl font-extrabold text-green-700">0.00 €</div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-3 bg-white p-6 rounded-xl card-shadow">
+                <h2 class="text-2xl font-bold mb-5 text-indigo-700">3. Administrar Empresas</h2>
+                <div class="p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl mb-4">
+                    <p class="text-sm text-yellow-800"><strong class="font-bold">Advertencia:</strong> Editar un nombre cambiará todas las facturas asociadas. Eliminar una empresa solo es posible si no tiene facturas registradas.</p>
+                </div>
+                <div id="company-admin-controls" class="space-y-3 sm:flex sm:space-y-0 sm:space-x-4 mb-4">
+                    <input type="password" id="admin-password-company" placeholder="Contraseña (admin)" class="input-style flex-grow">
+                    <button id="unlock-company-admin-button" class="sm:w-auto py-2 px-4 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition">Desbloquear</button>
+                </div>
+                <p id="company-admin-error" class="text-red-500 mt-2 font-medium hidden"></p>
+                <div id="company-admin-list-container" class="hidden mt-4">
+                    <h3 class="text-lg font-semibold mb-2 text-gray-800">Listado de Empresas:</h3>
+                    <div id="company-admin-list" class="space-y-2 max-h-60 overflow-y-auto pr-2"></div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-3 bg-white p-6 rounded-xl card-shadow">
+                <h2 class="text-2xl font-bold mb-5 text-indigo-700">4. Últimos Movimientos (Verificación)</h2>
+                <div id="recent-invoices-list" class="space-y-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Genérico -->
+    <div id="generic-modal" class="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center hidden z-50">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <h3 id="modal-title" class="text-xl font-bold text-gray-800 mb-4">Título</h3>
+            <p id="modal-body" class="text-gray-600 mb-6">Contenido.</p>
+            <div id="modal-input-container" class="hidden mb-4">
+                <label id="modal-input-label" for="modal-input" class="block text-sm font-medium text-gray-700">Etiqueta:</label>
+                <input type="text" id="modal-input" class="w-full input-style mt-1">
+            </div>
+            <div class="flex justify-end space-x-3">
+                <button id="modal-cancel-btn" class="py-2 px-4 bg-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-400 transition">Cancelar</button>
+                <button id="modal-confirm-btn" class="py-2 px-4 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase y lógica de la aplicación -->
+    <script type="module" src="script.js"></script>
+</body>
+</html>
