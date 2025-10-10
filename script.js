@@ -2,16 +2,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 import {
     getAuth,
     onAuthStateChanged,
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    signOut,
+    signInAnonymously,
+    EmailAuthProvider,
+    linkWithCredential,
     sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, onSnapshot, collection, query, addDoc, serverTimestamp, setLogLevel, getDocs, where, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 
-// Se asume que las variables `firebaseConfig` y `AUTHORIZED_EMAIL`
-// son cargadas globalmente por el archivo `config.js` antes de que se ejecute este script.
 const appId = firebaseConfig.appId;
 
 let app, db, auth, functions;
@@ -28,126 +26,115 @@ document.addEventListener('DOMContentLoaded', () => {
         db = getFirestore(app);
         functions = getFunctions(app);
 
-        setupAuthListeners();
+        document.getElementById('main-content').classList.remove('hidden');
+
         setupEventListeners();
-        setupModalListeners();
+        setupAuthListeners();
 
     } catch (error) {
         console.error("Error al inicializar Firebase:", error);
-        const authContainer = document.getElementById('auth-container');
-        authContainer.innerHTML = '<p class="text-red-500 text-center">Error crítico al cargar la configuración de la aplicación.</p>';
+        document.body.innerHTML = '<p class="text-red-500 text-center p-8">Error crítico al cargar la configuración de la aplicación.</p>';
     }
 });
 
-// --- LÓGICA DE AUTENTICACIÓN ---
+// --- LÓGICA DE AUTENTICACIÓN Y UI ---
 function setupAuthListeners() {
-    const calculateReportCallable = httpsCallable(functions, 'calculateReport');
-
-    onAuthStateChanged(auth, (user) => {
-        const authContainer = document.getElementById('auth-container');
-        const appContainer = document.getElementById('app-container');
-
+    onAuthStateChanged(auth, async (user) => {
         if (user) {
-            authContainer.classList.add('hidden');
-            appContainer.classList.remove('hidden');
-
+            updateUIForUser(user);
             currentUserId = user.uid;
-            document.getElementById('user-id-display').textContent = `Usuario: ${user.email}`;
-
-            document.getElementById('loading-message').classList.add('hidden');
-            document.getElementById('main-content').classList.remove('hidden');
-
-            setupFirestoreListeners();
-            setupReportControlsListeners(calculateReportCallable);
-            setupAdminControlsListeners();
+            if (!user.isAnonymous) {
+                setupFirestoreListeners();
+            }
         } else {
-            authContainer.classList.remove('hidden');
-            appContainer.classList.add('hidden');
-            currentUserId = null;
+            try {
+                await signInAnonymously(auth);
+            } catch (error) {
+                console.error("Error al iniciar sesión anónima:", error);
+                document.getElementById('user-id-display').textContent = "Error de conexión.";
+            }
         }
     });
+}
+
+function updateUIForUser(user) {
+    const logoutButton = document.getElementById('logout-button');
+    const userIdDisplay = document.getElementById('user-id-display');
+    const loadingMessage = document.getElementById('loading-message');
+
+    loadingMessage.classList.add('hidden');
+
+    if (user.isAnonymous) {
+        userIdDisplay.textContent = `Tu ID de sesión temporal: ${user.uid}`;
+        logoutButton.classList.add('hidden');
+    } else {
+        userIdDisplay.textContent = `Usuario: ${user.email}`;
+        logoutButton.classList.remove('hidden');
+    }
 }
 
 function setupEventListeners() {
-    const loginForm = document.getElementById('login-form');
-    const forgotPasswordForm = document.getElementById('forgot-password-form');
-    const logoutButton = document.getElementById('logout-button');
-    const loginView = document.getElementById('login-view');
-    const forgotPasswordView = document.getElementById('forgot-password-view');
-    const showForgotPassword = document.getElementById('show-forgot-password');
-    const backToLogin = document.getElementById('back-to-login');
+    // Botón de calcular siempre activo
+    const calculateButton = document.getElementById('calculate-sum-button');
+    calculateButton.addEventListener('click', handleCalculateClick);
 
-    loginForm.addEventListener('submit', handleLoginOrRegister);
-    logoutButton.addEventListener('click', handleLogout);
-    forgotPasswordForm.addEventListener('submit', handleForgotPassword);
-
-    showForgotPassword.addEventListener('click', (e) => {
-        e.preventDefault();
-        loginView.classList.add('hidden');
-        forgotPasswordView.classList.remove('hidden');
-    });
-
-    backToLogin.addEventListener('click', (e) => {
-        e.preventDefault();
-        loginView.classList.remove('hidden');
-        forgotPasswordView.classList.add('hidden');
-    });
+    // Otros listeners
+    setupAdminControlsListeners();
+    setupModalListeners();
 }
 
-async function handleLoginOrRegister(e) {
-    e.preventDefault();
-    const email = document.getElementById('login-email').value;
-    const password = document.getElementById('login-password').value;
-    const errorDisplay = document.getElementById('auth-error');
-    errorDisplay.textContent = '';
+async function handleCalculateClick() {
+    if (auth.currentUser && auth.currentUser.isAnonymous) {
+        const loggedIn = await showLoginModal();
+        if (!loggedIn) return;
+    }
+
+    // Proceder con el cálculo
+    const calculateReportCallable = httpsCallable(functions, 'calculateReport');
+    const passwordError = document.getElementById('password-error');
+    const calculateBtn = document.getElementById('calculate-sum-button');
+    calculateBtn.disabled = true;
+    calculateBtn.textContent = 'Calculando...';
+    passwordError.textContent = '';
+    resetReportDisplay();
+
+    const reportParams = {
+        appId: appId,
+        selectedCompany: document.getElementById('report-company-filter').value,
+        mainDateFilter: document.getElementById('main-date-filter').value,
+        startDate: document.getElementById('start-date-filter').value,
+        endDate: document.getElementById('end-date-filter').value,
+    };
 
     try {
-        // Intenta iniciar sesión primero
-        await signInWithEmailAndPassword(auth, email, password);
-    } catch (error) {
-        if (error.code === 'auth/user-not-found') {
-            // Si el usuario no existe, se asume que es un intento de registro.
-            // La autorización real ocurre en el backend. El frontend ya no necesita
-            // conocer el correo autorizado.
-            try {
-                await createUserWithEmailAndPassword(auth, email, password);
-            } catch (registerError) {
-                // Este error se mostrará si el correo no es válido, la contraseña es débil, etc.
-                errorDisplay.textContent = `Error en el registro: ${registerError.message}`;
+        const result = await calculateReportCallable(reportParams);
+        const { totalSum, invoiceCount } = result.data;
+        document.getElementById('total-sum-display').textContent = `${totalSum.toFixed(2)} €`;
+        let title = `Total para ${reportParams.selectedCompany || 'Todas las Empresas'}`;
+        if (reportParams.mainDateFilter !== 'none') {
+            let filterDesc = reportParams.mainDateFilter === 'invoiceDateRange' ? 'Factura' : 'Vencimiento';
+            title += ` (Fecha ${filterDesc}`;
+            if (reportParams.startDate || reportParams.endDate) {
+                title += `: `;
+                if(reportParams.startDate) title += `Desde ${reportParams.startDate} `;
+                if(reportParams.endDate) title += `Hasta ${reportParams.endDate}`;
             }
-        } else if (error.code === 'auth/wrong-password') {
-            errorDisplay.textContent = 'La contraseña es incorrecta.';
-        } else {
-            errorDisplay.textContent = `Error: ${error.message}`;
+            title += `)`;
         }
-    }
-}
-
-async function handleLogout() {
-    try {
-        await signOut(auth);
+        document.getElementById('sum-title').textContent = title + ':';
+        document.getElementById('report-feedback').textContent = `${invoiceCount} facturas consideradas en el cálculo.`;
     } catch (error) {
-        console.error("Error al cerrar sesión:", error);
+        console.error("Error al llamar a la función de reporte:", error);
+        passwordError.textContent = error.message || "Ocurrió un error desconocido.";
+        resetReportDisplay();
+    } finally {
+        calculateBtn.disabled = false;
+        calculateBtn.textContent = 'Calcular';
     }
 }
 
-async function handleForgotPassword(e) {
-    e.preventDefault();
-    const email = document.getElementById('forgot-password-email').value;
-    const messageDisplay = document.getElementById('forgot-password-message');
-    messageDisplay.textContent = '';
 
-    try {
-        await sendPasswordResetEmail(auth, email);
-        messageDisplay.textContent = 'Se ha enviado un enlace de restablecimiento a tu correo.';
-        messageDisplay.className = 'text-green-500 text-center mt-4';
-    } catch (error) {
-        messageDisplay.textContent = `Error: ${error.message}`;
-        messageDisplay.className = 'text-red-500 text-center mt-4';
-    }
-}
-
-// --- LÓGICA DE LA APLICACIÓN ---
+// --- LÓGICA DE LA APLICACIÓN (Facturas, etc.) ---
 function getCollectionRef(collectionName) {
     return collection(db, `artifacts/${appId}/public/data/${collectionName}`);
 }
@@ -255,70 +242,6 @@ function setupAdminControlsListeners() {
     });
 }
 
-function setupReportControlsListeners(calculateReportCallable) {
-    const calculateButton = document.getElementById('calculate-sum-button');
-    calculateButton.addEventListener('click', async () => {
-        const passwordError = document.getElementById('password-error');
-        const calculateBtn = document.getElementById('calculate-sum-button');
-        calculateBtn.disabled = true;
-        calculateBtn.textContent = 'Calculando...';
-        passwordError.textContent = '';
-        resetReportDisplay();
-
-        const reportParams = {
-            appId: appId,
-            selectedCompany: document.getElementById('report-company-filter').value,
-            mainDateFilter: document.getElementById('main-date-filter').value,
-            startDate: document.getElementById('start-date-filter').value,
-            endDate: document.getElementById('end-date-filter').value,
-        };
-
-        try {
-            const result = await calculateReportCallable(reportParams);
-            const { totalSum, invoiceCount } = result.data;
-            document.getElementById('total-sum-display').textContent = `${totalSum.toFixed(2)} €`;
-            let title = `Total para ${reportParams.selectedCompany || 'Todas las Empresas'}`;
-            if (reportParams.mainDateFilter !== 'none') {
-                let filterDesc = reportParams.mainDateFilter === 'invoiceDateRange' ? 'Factura' : 'Vencimiento';
-                title += ` (Fecha ${filterDesc}`;
-                if (reportParams.startDate || reportParams.endDate) {
-                    title += `: `;
-                    if(reportParams.startDate) title += `Desde ${reportParams.startDate} `;
-                    if(reportParams.endDate) title += `Hasta ${reportParams.endDate}`;
-                }
-                title += `)`;
-            }
-            document.getElementById('sum-title').textContent = title + ':';
-            document.getElementById('report-feedback').textContent = `${invoiceCount} facturas consideradas en el cálculo.`;
-        } catch (error) {
-            console.error("Error al llamar a la función de reporte:", error);
-            passwordError.textContent = error.message || "Ocurrió un error desconocido.";
-            resetReportDisplay();
-        } finally {
-            calculateBtn.disabled = false;
-            calculateBtn.textContent = 'Calcular';
-        }
-    });
-
-    const reportControlsIds = ['report-company-filter', 'main-date-filter', 'start-date-filter', 'end-date-filter'];
-    reportControlsIds.forEach(id => {
-        document.getElementById(id)?.addEventListener('change', resetReportDisplay);
-    });
-
-    document.getElementById('main-date-filter')?.addEventListener('change', () => {
-        const mainDateFilterEl = document.getElementById('main-date-filter');
-        const dateRangeInputsEl = document.getElementById('date-range-inputs');
-        if (mainDateFilterEl.value === 'none') {
-            dateRangeInputsEl.classList.add('hidden');
-            document.getElementById('start-date-filter').value = '';
-            document.getElementById('end-date-filter').value = '';
-        } else {
-            dateRangeInputsEl.classList.remove('hidden');
-        }
-        resetReportDisplay();
-    });
-}
-
 function resetReportDisplay() {
     document.getElementById('total-sum-display').textContent = '0.00 €';
     document.getElementById('sum-title').textContent = 'Total Acumulado Global:';
@@ -395,26 +318,114 @@ async function updateCompanyNameInFirestore(oldName, newName) {
 }
 
 let modalResolve = null;
-function showModal({ title, body, inputLabel = null, confirmText = 'Confirmar', cancelText = 'Cancelar' }) {
+
+function showLoginModal() {
     const modal = document.getElementById('generic-modal');
+    const modalContent = document.getElementById('modal-content');
+    const titleEl = modal.querySelector('#modal-title');
+    const confirmBtn = modal.querySelector('#modal-confirm-btn');
+    const cancelBtn = modal.querySelector('#modal-cancel-btn');
+
+    titleEl.textContent = 'Iniciar Sesión para Reportes';
+    confirmBtn.textContent = 'Entrar';
+    cancelBtn.textContent = 'Cancelar';
+
+    modalContent.innerHTML = `
+        <form id="modal-login-form" class="space-y-4">
+            <input type="email" id="modal-login-email" placeholder="Correo electrónico" required class="w-full input-style">
+            <input type="password" id="modal-login-password" placeholder="Contraseña (inicial: admin)" required class="w-full input-style">
+            <p id="modal-auth-error" class="text-red-500 text-center"></p>
+            <div class="text-center">
+                <a href="#" id="modal-forgot-password" class="text-sm text-indigo-600 hover:underline">¿Olvidaste tu contraseña?</a>
+            </div>
+        </form>
+    `;
+
+    modal.classList.remove('hidden');
+
     return new Promise(resolve => {
         modalResolve = resolve;
-        modal.querySelector('#modal-title').textContent = title;
-        modal.querySelector('#modal-body').textContent = body;
+
+        const loginForm = modal.querySelector('#modal-login-form');
+        const forgotPasswordLink = modal.querySelector('#modal-forgot-password');
+
+        loginForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const email = modal.querySelector('#modal-login-email').value;
+            const password = modal.querySelector('#modal-login-password').value;
+            const errorDisplay = modal.querySelector('#modal-auth-error');
+            errorDisplay.textContent = '';
+
+            try {
+                const credential = EmailAuthProvider.credential(email, password);
+                await linkWithCredential(auth.currentUser, credential);
+                modal.classList.add('hidden');
+                resolve(true);
+            } catch (error) {
+                errorDisplay.textContent = 'Error: Credenciales incorrectas.';
+                console.error("Error al vincular credenciales:", error);
+                resolve(false);
+            }
+        };
+
+        forgotPasswordLink.onclick = async (e) => {
+            e.preventDefault();
+            const email = modal.querySelector('#modal-login-email').value;
+            const errorDisplay = modal.querySelector('#modal-auth-error');
+            if (!email) {
+                errorDisplay.textContent = 'Introduce tu correo para restablecer la contraseña.';
+                return;
+            }
+            try {
+                await sendPasswordResetEmail(auth, email);
+                errorDisplay.textContent = 'Enlace de restablecimiento enviado.';
+                errorDisplay.className = 'text-green-500 text-center';
+            } catch (error) {
+                errorDisplay.textContent = 'Error al enviar el correo.';
+            }
+        };
+    });
+}
+
+function showModal({ title, body, inputLabel = null, confirmText = 'Confirmar', cancelText = 'Cancelar' }) {
+    const modal = document.getElementById('generic-modal');
+    const modalContent = document.getElementById('modal-content');
+    const titleEl = modal.querySelector('#modal-title');
+    titleEl.textContent = title;
+
+    modalContent.innerHTML = '';
+
+    const bodyP = document.createElement('p');
+    bodyP.className = 'text-gray-600 mb-6';
+    bodyP.textContent = body;
+    modalContent.appendChild(bodyP);
+
+    if (inputLabel) {
+        const inputContainer = document.createElement('div');
+        const label = document.createElement('label');
+        label.textContent = inputLabel;
+        label.className = 'block text-sm font-medium text-gray-700';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = 'modal-input';
+        input.className = 'w-full input-style mt-1';
+        inputContainer.appendChild(label);
+        inputContainer.appendChild(input);
+        modalContent.appendChild(inputContainer);
+    }
+
+    return new Promise(resolve => {
+        modalResolve = resolve;
         const confirmBtn = modal.querySelector('#modal-confirm-btn');
         const cancelBtn = modal.querySelector('#modal-cancel-btn');
-        const inputContainer = modal.querySelector('#modal-input-container');
-        const inputField = modal.querySelector('#modal-input');
+
         confirmBtn.textContent = confirmText;
         cancelBtn.textContent = cancelText;
         cancelBtn.classList.toggle('hidden', !cancelText);
-        inputContainer.classList.toggle('hidden', !inputLabel);
-        if (inputLabel) {
-            inputContainer.querySelector('#modal-input-label').textContent = inputLabel;
-            inputField.value = '';
-        }
+
         modal.classList.remove('hidden');
-        if (inputLabel) inputField.focus();
+        const inputField = modal.querySelector('#modal-input');
+        if (inputField) inputField.focus();
     });
 }
 
@@ -422,11 +433,12 @@ function setupModalListeners() {
     document.getElementById('modal-confirm-btn')?.addEventListener('click', () => {
         const modal = document.getElementById('generic-modal');
         if (modalResolve) {
-            const isInputVisible = !modal.querySelector('#modal-input-container').classList.contains('hidden');
-            modalResolve(isInputVisible ? modal.querySelector('#modal-input').value : true);
+            const inputField = modal.querySelector('#modal-input');
+            modalResolve(inputField ? inputField.value : true);
         }
         modal.classList.add('hidden');
     });
+
     document.getElementById('modal-cancel-btn')?.addEventListener('click', () => {
         const modal = document.getElementById('generic-modal');
         if (modalResolve) modalResolve(null);

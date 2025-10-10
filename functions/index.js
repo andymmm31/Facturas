@@ -5,19 +5,18 @@ admin.initializeApp();
 const db = admin.firestore();
 const auth = admin.auth();
 
-// El correo autorizado se debe configurar como una variable de entorno en Firebase:
-// firebase functions:config:set auth.email="correo.real@ejemplo.com"
-const AUTHORIZED_EMAIL = functions.config().auth?.email;
+// La lista de correos autorizados se debe configurar como una variable de entorno en Firebase:
+// firebase functions:config:set auth.emails="julian.s.2025.10@example.com,andres.mera@example.com"
+const AUTHORIZED_EMAILS = (functions.config().auth?.emails || "").split(',');
 
 exports.calculateReport = functions.https.onCall(async (data, context) => {
-    if (!AUTHORIZED_EMAIL) {
+    if (!AUTHORIZED_EMAILS || AUTHORIZED_EMAILS.length === 0 || AUTHORIZED_EMAILS[0] === '') {
         throw new functions.https.HttpsError(
             "internal",
-            "La configuración del correo autorizado no está definida en el servidor."
+            "La configuración de correos autorizados no está definida en el servidor."
         );
     }
 
-    // 1. Verificar si el usuario está autenticado.
     if (!context.auth) {
         throw new functions.https.HttpsError(
             "unauthenticated",
@@ -25,30 +24,14 @@ exports.calculateReport = functions.https.onCall(async (data, context) => {
         );
     }
 
-    // 2. Verificar si el usuario autenticado es el autorizado.
-    // Obtenemos el UID del usuario que llama a la función.
-    const callerUid = context.auth.uid;
-
-    try {
-        // Obtenemos el registro de usuario completo a partir de su correo.
-        const authorizedUserRecord = await auth.getUserByEmail(AUTHORIZED_EMAIL);
-
-        // Comparamos el UID del que llama con el UID del usuario autorizado.
-        if (callerUid !== authorizedUserRecord.uid) {
-            throw new functions.https.HttpsError(
-                "permission-denied",
-                "No tienes permiso para ejecutar este reporte."
-            );
-        }
-    } catch (error) {
-        console.error("Error al verificar el usuario autorizado:", error);
+    const callerEmail = context.auth.token.email;
+    if (!AUTHORIZED_EMAILS.includes(callerEmail)) {
         throw new functions.https.HttpsError(
-            "internal",
-            "No se pudo verificar la autorización del usuario."
+            "permission-denied",
+            "No tienes permiso para ejecutar este reporte."
         );
     }
 
-    // 3. Si la autorización es correcta, procedemos con la lógica del reporte.
     try {
         const { appId, selectedCompany, mainDateFilter, startDate, endDate } = data;
         const invoicesRef = db.collection(`artifacts/${appId}/public/data/invoices`);
