@@ -34,6 +34,16 @@
                 <div id="report-results" class="text-center p-8 bg-gray-100 rounded-xl border-dashed border-2 border-gray-300">
                     <!-- Resultados se insertarán aquí -->
                 </div>
+
+                <!-- Nueva sección para cambiar contraseña -->
+                <div id="change-password-section" class="hidden mt-6 pt-4 border-t">
+                    <button id="change-password-btn" class="py-2 px-4 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600">Cambiar Contraseña</button>
+                    <form id="change-password-form" class="hidden mt-4 space-y-2">
+                        <input type="password" id="new-password-input" placeholder="Nueva Contraseña" required class="w-full input-style max-w-xs mx-auto">
+                        <button type="submit" class="py-2 px-4 bg-indigo-600 text-white rounded-lg">Confirmar Cambio</button>
+                        <p id="change-password-feedback" class="text-sm"></p>
+                    </form>
+                </div>
             </div>
             <div class="lg:col-span-3 bg-white p-6 rounded-xl card-shadow">
                 <h2 class="text-2xl font-bold mb-5 text-indigo-700">3. Últimos Movimientos</h2>

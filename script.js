@@ -1,6 +1,6 @@
 import { firebaseConfig } from "./config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInAnonymously, EmailAuthProvider, linkWithCredential, sendPasswordResetEmail, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signInAnonymously, EmailAuthProvider, linkWithCredential, sendPasswordResetEmail, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, onSnapshot, collection, query, addDoc, serverTimestamp, getDocs, where, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 
@@ -67,8 +67,10 @@ function setupAuthListeners() {
 }
 
 function updateUIForUser(user) {
-    document.getElementById('user-id-display').textContent = user.isAnonymous ? `ID de sesión: ${user.uid.substring(0, 8)}...` : `Usuario: ${user.email}`;
-    document.getElementById('logout-button').classList.toggle('hidden', user.isAnonymous);
+    const isAnon = user.isAnonymous;
+    document.getElementById('user-id-display').textContent = isAnon ? `ID de sesión: ${user.uid.substring(0, 8)}...` : `Usuario: ${user.email}`;
+    document.getElementById('logout-button').classList.toggle('hidden', isAnon);
+    document.getElementById('change-password-section').classList.toggle('hidden', isAnon);
 }
 
 function setupEventListeners() {
@@ -80,6 +82,38 @@ function setupEventListeners() {
     });
     setupAdminControlsListeners();
     setupModalListeners();
+    setupChangePasswordListeners();
+}
+
+function setupChangePasswordListeners() {
+    const changePassBtn = document.getElementById('change-password-btn');
+    const changePassForm = document.getElementById('change-password-form');
+    const feedbackEl = document.getElementById('change-password-feedback');
+
+    changePassBtn.addEventListener('click', () => {
+        changePassForm.classList.toggle('hidden');
+    });
+
+    changePassForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const newPassword = document.getElementById('new-password-input').value;
+        feedbackEl.textContent = 'Cambiando...';
+
+        try {
+            await updatePassword(auth.currentUser, newPassword);
+            feedbackEl.textContent = '¡Contraseña cambiada con éxito!';
+            feedbackEl.style.color = 'green';
+            changePassForm.reset();
+            setTimeout(() => {
+                feedbackEl.textContent = '';
+                changePassForm.classList.add('hidden');
+            }, 3000);
+        } catch (error) {
+            console.error("Error al cambiar contraseña:", error);
+            feedbackEl.textContent = 'Error: ' + error.message;
+            feedbackEl.style.color = 'red';
+        }
+    });
 }
 
 async function handleCalculateClick() {
