@@ -1,50 +1,68 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 
-// Inicializar la app de Admin para poder acceder a Firestore
 admin.initializeApp();
 const db = admin.firestore();
+const auth = admin.auth();
 
-// Esta es una "Callable Function". Es la forma recomendada y segura
-// de llamar a funciones de backend desde tu app web.
+// El correo autorizado se debe configurar como una variable de entorno en Firebase:
+// firebase functions:config:set auth.email="correo.real@ejemplo.com"
+const AUTHORIZED_EMAIL = functions.config().auth?.email;
+
 exports.calculateReport = functions.https.onCall(async (data, context) => {
-    // >>> IMPORTANTE: Configuración de Seguridad <<<
-    // La contraseña real se debe configurar como una variable de entorno secreta en Firebase.
-    // gcloud secrets versions access latest --secret=ADMIN_PASSWORD
-    // Por ahora, usamos un valor por defecto para el desarrollo.
-    const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin";
-
-    // 1. Validar la contraseña que nos envía el cliente
-    if (data.password !== ADMIN_PASSWORD) {
-        // Si la contraseña es incorrecta, lanzamos un error.
-        // El cliente recibirá este mensaje.
+    if (!AUTHORIZED_EMAIL) {
         throw new functions.https.HttpsError(
-            "unauthenticated",
-            "La contraseña proporcionada es incorrecta."
+            "internal",
+            "La configuración del correo autorizado no está definida en el servidor."
         );
     }
 
-    // 2. Si la contraseña es correcta, procedemos a consultar la base de datos
+    // 1. Verificar si el usuario está autenticado.
+    if (!context.auth) {
+        throw new functions.https.HttpsError(
+            "unauthenticated",
+            "Debes iniciar sesión para realizar esta acción."
+        );
+    }
+
+    // 2. Verificar si el usuario autenticado es el autorizado.
+    // Obtenemos el UID del usuario que llama a la función.
+    const callerUid = context.auth.uid;
+
+    try {
+        // Obtenemos el registro de usuario completo a partir de su correo.
+        const authorizedUserRecord = await auth.getUserByEmail(AUTHORIZED_EMAIL);
+
+        // Comparamos el UID del que llama con el UID del usuario autorizado.
+        if (callerUid !== authorizedUserRecord.uid) {
+            throw new functions.https.HttpsError(
+                "permission-denied",
+                "No tienes permiso para ejecutar este reporte."
+            );
+        }
+    } catch (error) {
+        console.error("Error al verificar el usuario autorizado:", error);
+        throw new functions.https.HttpsError(
+            "internal",
+            "No se pudo verificar la autorización del usuario."
+        );
+    }
+
+    // 3. Si la autorización es correcta, procedemos con la lógica del reporte.
     try {
         const { appId, selectedCompany, mainDateFilter, startDate, endDate } = data;
-
-        // Construimos la referencia a la colección de facturas
         const invoicesRef = db.collection(`artifacts/${appId}/public/data/invoices`);
         let query = invoicesRef;
 
-        // 3. Aplicamos los filtros a la consulta
         if (selectedCompany) {
             query = query.where("company", "==", selectedCompany);
         }
 
-        // Obtenemos todos los documentos que coinciden con el filtro de empresa
         const snapshot = await query.get();
-
         if (snapshot.empty) {
             return { totalSum: 0, invoiceCount: 0 };
         }
 
-        // 4. Filtramos por fecha (esto se hace en memoria después de la consulta inicial)
         let filteredInvoices = snapshot.docs.map(doc => doc.data());
 
         if (mainDateFilter === 'invoiceDateRange' || mainDateFilter === 'dueDateRange') {
@@ -57,10 +75,8 @@ exports.calculateReport = functions.https.onCall(async (data, context) => {
             }
         }
 
-        // 5. Calculamos la suma total
         const totalSum = filteredInvoices.reduce((sum, inv) => sum + inv.amount, 0);
 
-        // 6. Devolvemos el resultado al cliente
         return {
             totalSum: totalSum,
             invoiceCount: filteredInvoices.length,
@@ -68,7 +84,6 @@ exports.calculateReport = functions.https.onCall(async (data, context) => {
 
     } catch (error) {
         console.error("Error al calcular el reporte:", error);
-        // Si algo sale mal en el servidor, lanzamos un error genérico.
         throw new functions.https.HttpsError(
             "internal",
             "Ocurrió un error interno al procesar el reporte."

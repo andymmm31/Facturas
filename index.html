@@ -4,17 +4,52 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestión de Facturas y Reportes</title>
-    <!-- Carga de Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Estilos personalizados -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-        <header class="mb-6 pb-4 border-b border-indigo-200">
-            <h1 class="text-3xl font-extrabold text-indigo-800">Sistema de Gestión de Facturas</h1>
-            <p id="user-id-display" class="text-sm text-gray-500 mt-1">ID de usuario: Cargando...</p>
+    <!-- Contenedor de Autenticación (Visible por defecto) -->
+    <div id="auth-container" class="min-h-screen flex items-center justify-center bg-gray-100">
+        <div class="max-w-md w-full bg-white p-8 rounded-xl shadow-lg">
+            <!-- Formulario de Login (Vista inicial) -->
+            <div id="login-view">
+                <h2 class="text-2xl font-bold text-center text-indigo-800 mb-6">Iniciar Sesión</h2>
+                <form id="login-form" class="space-y-4">
+                    <input type="email" id="login-email" placeholder="Correo electrónico" required class="w-full input-style">
+                    <input type="password" id="login-password" placeholder="Contraseña" required class="w-full input-style">
+                    <button type="submit" class="w-full py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700">Entrar</button>
+                </form>
+                <p id="auth-error" class="text-red-500 text-center mt-4"></p>
+                <div class="text-center mt-4">
+                    <a href="#" id="show-forgot-password" class="text-sm text-indigo-600 hover:underline">¿Olvidaste tu contraseña?</a>
+                </div>
+            </div>
+
+            <!-- Formulario de Recuperación de Contraseña (Oculto) -->
+            <div id="forgot-password-view" class="hidden">
+                <h2 class="text-2xl font-bold text-center text-indigo-800 mb-6">Restablecer Contraseña</h2>
+                <p class="text-center text-gray-600 mb-4">Introduce tu correo para recibir un enlace de restablecimiento.</p>
+                <form id="forgot-password-form" class="space-y-4">
+                    <input type="email" id="forgot-password-email" placeholder="Correo electrónico" required class="w-full input-style">
+                    <button type="submit" class="w-full py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700">Enviar Enlace</button>
+                </form>
+                <p id="forgot-password-message" class="text-center mt-4"></p>
+                <div class="text-center mt-4">
+                    <a href="#" id="back-to-login" class="text-sm text-indigo-600 hover:underline">Volver a inicio de sesión</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contenedor Principal de la Aplicación (Oculto por defecto) -->
+    <div id="app-container" class="hidden max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        <header class="mb-6 pb-4 border-b border-indigo-200 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-extrabold text-indigo-800">Sistema de Gestión de Facturas</h1>
+                <p id="user-id-display" class="text-sm text-gray-500 mt-1">ID de usuario: Cargando...</p>
+            </div>
+            <button id="logout-button" class="py-2 px-4 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600">Cerrar Sesión</button>
         </header>
 
         <div id="loading-message" class="text-center p-10 text-xl font-semibold text-indigo-600">Cargando...</div>
@@ -54,8 +89,7 @@
                 <div class="p-6 bg-indigo-50 border-2 border-indigo-200 rounded-xl mb-6">
                     <div class="space-y-3 sm:flex sm:space-y-0 sm:space-x-4">
                         <select id="report-company-filter" class="flex-grow input-style"></select>
-                        <input type="password" id="report-password" placeholder="Contraseña (admin)" class="input-style sm:w-1/3">
-                        <button id="calculate-sum-button" class="sm:w-auto py-2 px-4 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600 transition">Calcular</button>
+                        <button id="calculate-sum-button" class="w-full sm:w-auto py-2 px-4 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600 transition">Calcular</button>
                     </div>
                     <div class="mt-4 pt-4 border-t border-indigo-200 space-y-3">
                         <label for="main-date-filter" class="block text-sm font-medium text-gray-700">Filtro de Fecha:</label>
@@ -86,12 +120,7 @@
                 <div class="p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl mb-4">
                     <p class="text-sm text-yellow-800"><strong class="font-bold">Advertencia:</strong> Editar un nombre cambiará todas las facturas asociadas. Eliminar una empresa solo es posible si no tiene facturas registradas.</p>
                 </div>
-                <div id="company-admin-controls" class="space-y-3 sm:flex sm:space-y-0 sm:space-x-4 mb-4">
-                    <input type="password" id="admin-password-company" placeholder="Contraseña (admin)" class="input-style flex-grow">
-                    <button id="unlock-company-admin-button" class="sm:w-auto py-2 px-4 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition">Desbloquear</button>
-                </div>
-                <p id="company-admin-error" class="text-red-500 mt-2 font-medium hidden"></p>
-                <div id="company-admin-list-container" class="hidden mt-4">
+                <div id="company-admin-list-container" class="mt-4">
                     <h3 class="text-lg font-semibold mb-2 text-gray-800">Listado de Empresas:</h3>
                     <div id="company-admin-list" class="space-y-2 max-h-60 overflow-y-auto pr-2"></div>
                 </div>
@@ -104,7 +133,6 @@
         </div>
     </div>
 
-    <!-- Modal Genérico -->
     <div id="generic-modal" class="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center hidden z-50">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <h3 id="modal-title" class="text-xl font-bold text-gray-800 mb-4">Título</h3>
@@ -120,7 +148,9 @@
         </div>
     </div>
 
-    <!-- Firebase y lógica de la aplicación -->
+    <!-- Carga la configuración de Firebase (que contiene las claves) -->
+    <script src="config.js"></script>
+    <!-- Carga la lógica principal de la aplicación -->
     <script type="module" src="script.js"></script>
 </body>
 </html>

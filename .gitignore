@@ -1,0 +1,17 @@
+# Firebase
+node_modules
+/functions/node_modules
+
+# Archivo de configuración local con claves secretas
+config.js
+/functions/config.js
+
+# Registros y archivos de depuración
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
