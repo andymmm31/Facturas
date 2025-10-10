@@ -1,6 +1,6 @@
 import { firebaseConfig } from "./config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInAnonymously, EmailAuthProvider, linkWithCredential, sendPasswordResetEmail, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signInAnonymously, EmailAuthProvider, linkWithCredential, sendPasswordResetEmail, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, onSnapshot, collection, query, addDoc, serverTimestamp, getDocs, where, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 
@@ -38,15 +38,7 @@ function mountApp() {
         <button type="submit" class="w-full py-3 px-4 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700">Guardar Factura</button>
         <p id="form-message" class="text-center"></p>`;
 
-    document.getElementById('report-section').innerHTML = `
-        <div><label class="block text-sm font-medium text-gray-700 mb-1">Empresas:</label><div id="report-company-filter-container" class="p-2 border rounded-lg bg-white max-h-32 overflow-y-auto"></div></div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div><label class="block text-sm font-medium text-gray-700 mb-1">Fechas de Factura:</label><div id="invoice-date-filter-container" class="p-2 border rounded-lg bg-white max-h-32 overflow-y-auto"></div></div>
-            <div><label class="block text-sm font-medium text-gray-700 mb-1">Fechas de Vencimiento:</label><div id="due-date-filter-container" class="p-2 border rounded-lg bg-white max-h-32 overflow-y-auto"></div></div>
-        </div>
-        <div><label class="block text-sm font-medium text-gray-700 mb-1">Filtro por Rango de Fechas:</label><select id="main-date-filter" class="input-style w-full"><option value="none" selected>Sin filtro de rango</option><option value="invoiceDateRange">Rango por Fecha de Factura</option><option value="dueDateRange">Rango por Fecha de Vencimiento</option></select><div id="date-range-inputs" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2"><input type="date" id="start-date-filter" class="input-style w-full"><input type="date" id="end-date-filter" class="input-style w-full"></div></div>
-        <div class="pt-4 border-t"><button id="calculate-sum-button" class="w-full py-2 px-4 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600 transition">Calcular Total</button></div>`;
-
+    // El contenido de report-section ahora está definido estáticamente en index.html
     document.getElementById('report-results').innerHTML = `
         <p id="sum-title" class="text-xl font-medium text-gray-700 mb-2">Resultados del Reporte</p>
         <div id="total-sum-display" class="text-5xl font-extrabold text-green-700">0.00 €</div>
@@ -67,53 +59,24 @@ function setupAuthListeners() {
 }
 
 function updateUIForUser(user) {
-    const isAnon = user.isAnonymous;
-    document.getElementById('user-id-display').textContent = isAnon ? `ID de sesión: ${user.uid.substring(0, 8)}...` : `Usuario: ${user.email}`;
-    document.getElementById('logout-button').classList.toggle('hidden', isAnon);
-    document.getElementById('change-password-section').classList.toggle('hidden', isAnon);
+    document.getElementById('user-id-display').textContent = user.isAnonymous ? `ID de sesión: ${user.uid.substring(0, 8)}...` : `Usuario: ${user.email}`;
+    document.getElementById('logout-button').classList.toggle('hidden', user.isAnonymous);
 }
 
 function setupEventListeners() {
     document.getElementById('calculate-sum-button').addEventListener('click', handleCalculateClick);
     document.getElementById('export-button').addEventListener('click', handleExport);
     document.getElementById('logout-button').addEventListener('click', () => signOut(auth));
-    document.getElementById('main-date-filter').addEventListener('change', (e) => {
-        document.getElementById('date-range-inputs').classList.toggle('hidden', e.target.value === 'none');
+
+    document.getElementById('date-filter-type').addEventListener('change', (e) => {
+        const selection = e.target.value;
+        document.getElementById('range-filter-container').classList.toggle('hidden', selection !== 'range');
+        document.getElementById('invoice-date-filter-container').classList.toggle('hidden', selection !== 'invoiceDate');
+        document.getElementById('due-date-filter-container').classList.toggle('hidden', selection !== 'dueDate');
     });
+
     setupAdminControlsListeners();
     setupModalListeners();
-    setupChangePasswordListeners();
-}
-
-function setupChangePasswordListeners() {
-    const changePassBtn = document.getElementById('change-password-btn');
-    const changePassForm = document.getElementById('change-password-form');
-    const feedbackEl = document.getElementById('change-password-feedback');
-
-    changePassBtn.addEventListener('click', () => {
-        changePassForm.classList.toggle('hidden');
-    });
-
-    changePassForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const newPassword = document.getElementById('new-password-input').value;
-        feedbackEl.textContent = 'Cambiando...';
-
-        try {
-            await updatePassword(auth.currentUser, newPassword);
-            feedbackEl.textContent = '¡Contraseña cambiada con éxito!';
-            feedbackEl.style.color = 'green';
-            changePassForm.reset();
-            setTimeout(() => {
-                feedbackEl.textContent = '';
-                changePassForm.classList.add('hidden');
-            }, 3000);
-        } catch (error) {
-            console.error("Error al cambiar contraseña:", error);
-            feedbackEl.textContent = 'Error: ' + error.message;
-            feedbackEl.style.color = 'red';
-        }
-    });
 }
 
 async function handleCalculateClick() {
@@ -126,14 +89,26 @@ async function handleCalculateClick() {
     calculateBtn.textContent = 'Calculando...';
     document.getElementById('export-button').classList.add('hidden');
 
-    const reportParams = {
+    const filterType = document.getElementById('date-filter-type').value;
+    let reportParams = {
         selectedCompanies: getCheckedValues('company-filter'),
-        selectedInvoiceDates: getCheckedValues('invoice-date-filter'),
-        selectedDueDates: getCheckedValues('due-date-filter'),
-        mainDateFilter: document.getElementById('main-date-filter').value,
-        startDate: document.getElementById('start-date-filter').value,
-        endDate: document.getElementById('end-date-filter').value,
+        filterType: filterType,
+        selectedInvoiceDates: [],
+        selectedDueDates: [],
+        startDate: null,
+        endDate: null,
+        rangeType: null
     };
+
+    if (filterType === 'range') {
+        reportParams.startDate = document.getElementById('start-date-filter').value;
+        reportParams.endDate = document.getElementById('end-date-filter').value;
+        reportParams.rangeType = document.querySelector('input[name="range-type"]:checked').value;
+    } else if (filterType === 'invoiceDate') {
+        reportParams.selectedInvoiceDates = getCheckedValues('invoice-date-filter');
+    } else if (filterType === 'dueDate') {
+        reportParams.selectedDueDates = getCheckedValues('due-date-filter');
+    }
 
     try {
         const calculateReportCallable = httpsCallable(functions, 'calculateReport');

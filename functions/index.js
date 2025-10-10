@@ -22,7 +22,7 @@ exports.calculateReport = functions.https.onCall(async (data, context) => {
     }
 
     try {
-        const { appId, selectedCompanies, selectedInvoiceDates, selectedDueDates, mainDateFilter, startDate, endDate } = data;
+        const { appId, selectedCompanies, filterType, selectedInvoiceDates, selectedDueDates, startDate, endDate, rangeType } = data;
         let query = db.collection(`artifacts/${appId}/public/data/invoices`);
 
         if (selectedCompanies && selectedCompanies.length > 0) {
@@ -32,17 +32,25 @@ exports.calculateReport = functions.https.onCall(async (data, context) => {
         const snapshot = await query.get();
         let filteredInvoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // Filtros en memoria
-        if (selectedInvoiceDates && selectedInvoiceDates.length > 0) {
-            filteredInvoices = filteredInvoices.filter(inv => selectedInvoiceDates.includes(inv.invoiceDate));
-        }
-        if (selectedDueDates && selectedDueDates.length > 0) {
-            filteredInvoices = filteredInvoices.filter(inv => selectedDueDates.includes(inv.dueDate));
-        }
-        if (mainDateFilter === 'invoiceDateRange' || mainDateFilter === 'dueDateRange') {
-            const dateField = mainDateFilter === 'invoiceDateRange' ? 'invoiceDate' : 'dueDate';
-            if (startDate) filteredInvoices = filteredInvoices.filter(inv => inv[dateField] && inv[dateField] >= startDate);
-            if (endDate) filteredInvoices = filteredInvoices.filter(inv => inv[dateField] && inv[dateField] <= endDate);
+        // Aplicar filtros de fecha en memoria
+        if (filterType === 'invoiceDate') {
+            if (selectedInvoiceDates && selectedInvoiceDates.length > 0) {
+                filteredInvoices = filteredInvoices.filter(inv => selectedInvoiceDates.includes(inv.invoiceDate));
+            }
+        } else if (filterType === 'dueDate') {
+            if (selectedDueDates && selectedDueDates.length > 0) {
+                filteredInvoices = filteredInvoices.filter(inv => selectedDueDates.includes(inv.dueDate));
+            }
+        } else if (filterType === 'range' && (startDate || endDate)) {
+            filteredInvoices = filteredInvoices.filter(inv => {
+                const checkInvoiceDate = !inv.invoiceDate || ((!startDate || inv.invoiceDate >= startDate) && (!endDate || inv.invoiceDate <= endDate));
+                const checkDueDate = !inv.dueDate || ((!startDate || inv.dueDate >= startDate) && (!endDate || inv.dueDate <= endDate));
+
+                if (rangeType === 'invoiceDate') return checkInvoiceDate;
+                if (rangeType === 'dueDate') return checkDueDate;
+                if (rangeType === 'both') return checkInvoiceDate || checkDueDate;
+                return true;
+            });
         }
 
         const totalSum = filteredInvoices.reduce((sum, inv) => sum + (inv.amount || 0), 0);
