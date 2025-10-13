@@ -1,6 +1,6 @@
 import { firebaseConfig } from "./config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInAnonymously, EmailAuthProvider, linkWithCredential, sendPasswordResetEmail, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signInAnonymously, EmailAuthProvider, linkWithCredential, sendPasswordResetEmail, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, onSnapshot, collection, query, addDoc, serverTimestamp, getDocs, where, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 
@@ -59,8 +59,10 @@ function setupAuthListeners() {
 }
 
 function updateUIForUser(user) {
-    document.getElementById('user-id-display').textContent = user.isAnonymous ? `ID de sesión: ${user.uid.substring(0, 8)}...` : `Usuario: ${user.email}`;
-    document.getElementById('logout-button').classList.toggle('hidden', user.isAnonymous);
+    const isAnon = user.isAnonymous;
+    document.getElementById('user-id-display').textContent = isAnon ? `ID de sesión: ${user.uid.substring(0, 8)}...` : `Usuario: ${user.email}`;
+    document.getElementById('logout-button').classList.toggle('hidden', isAnon);
+    document.getElementById('change-password-section').classList.toggle('hidden', isAnon);
 }
 
 function setupEventListeners() {
@@ -77,6 +79,38 @@ function setupEventListeners() {
 
     setupAdminControlsListeners();
     setupModalListeners();
+    setupChangePasswordListeners();
+}
+
+function setupChangePasswordListeners() {
+    const changePassBtn = document.getElementById('change-password-btn');
+    const changePassForm = document.getElementById('change-password-form');
+    const feedbackEl = document.getElementById('change-password-feedback');
+
+    changePassBtn.addEventListener('click', () => {
+        changePassForm.classList.toggle('hidden');
+    });
+
+    changePassForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const newPassword = document.getElementById('new-password-input').value;
+        feedbackEl.textContent = 'Cambiando...';
+
+        try {
+            await updatePassword(auth.currentUser, newPassword);
+            feedbackEl.textContent = '¡Contraseña cambiada con éxito!';
+            feedbackEl.style.color = 'green';
+            changePassForm.reset();
+            setTimeout(() => {
+                feedbackEl.textContent = '';
+                changePassForm.classList.add('hidden');
+            }, 3000);
+        } catch (error) {
+            console.error("Error al cambiar contraseña:", error);
+            feedbackEl.textContent = 'Error: ' + error.message;
+            feedbackEl.style.color = 'red';
+        }
+    });
 }
 
 async function handleCalculateClick() {
@@ -229,7 +263,7 @@ function showLoginModal() {
 
     modal.querySelector('#modal-content').innerHTML = `
         <form id="modal-login-form" class="space-y-4">
-            <input type="email" id="modal-login-email" placeholder="Correo electrónico" required class="w-full input-style">
+            <input type="text" id="modal-login-user" placeholder="Usuario" required class="w-full input-style">
             <input type="password" id="modal-login-password" placeholder="Contraseña" required class="w-full input-style">
             <p id="modal-auth-error" class="text-red-500 text-center"></p>
             <a href="#" id="modal-forgot-password" class="text-sm text-indigo-600 hover:underline">¿Olvidaste tu contraseña?</a>
@@ -240,7 +274,9 @@ function showLoginModal() {
         modalResolve = resolve;
         modal.querySelector('#modal-login-form').onsubmit = async (e) => {
             e.preventDefault();
-            const email = modal.querySelector('#modal-login-email').value;
+            const user = modal.querySelector('#modal-login-user').value.trim();
+            // Construir un correo electrónico ficticio para la autenticación de Firebase
+            const email = `${user}@invoicereports.com`;
             const password = modal.querySelector('#modal-login-password').value;
             const errorDisplay = modal.querySelector('#modal-auth-error');
             try {
@@ -253,17 +289,10 @@ function showLoginModal() {
                 resolve(false);
             }
         };
-        modal.querySelector('#modal-forgot-password').onclick = async (e) => {
+        modal.querySelector('#modal-forgot-password').onclick = (e) => {
             e.preventDefault();
-            const email = modal.querySelector('#modal-login-email').value;
             const errorDisplay = modal.querySelector('#modal-auth-error');
-            if (!email) { errorDisplay.textContent = 'Introduce tu correo.'; return; }
-            try {
-                await sendPasswordResetEmail(auth, email);
-                errorDisplay.textContent = 'Enlace de restablecimiento enviado.';
-            } catch (error) {
-                errorDisplay.textContent = 'Error al enviar el correo.';
-            }
+            errorDisplay.textContent = 'Función no disponible para estos usuarios.';
         };
     });
 }

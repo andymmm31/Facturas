@@ -4,14 +4,17 @@ const admin = require("firebase-admin");
 admin.initializeApp();
 const db = admin.firestore();
 
-// La lista de correos autorizados se debe configurar como una variable de entorno en Firebase:
-// firebase functions:config:set auth.emails="julian.s.2025.10@example.com,andres.mera@example.com"
-const AUTHORIZED_EMAILS = (functions.config().auth?.emails || "").split(',');
+// Se utiliza un sistema de autenticación con "usuarios" en lugar de correos.
+// El frontend construye un correo ficticio (usuario@invoicereports.com) para que Firebase Auth funcione.
+// Aquí, autorizamos explícitamente esos correos ficticios.
+const AUTHORIZED_EMAILS = [
+    "julian.s.2025@invoicereports.com",
+    "andres.mera@invoicereports.com"
+];
 
 exports.calculateReport = functions.https.onCall(async (data, context) => {
-    if (!AUTHORIZED_EMAILS || AUTHORIZED_EMAILS.length === 0 || AUTHORIZED_EMAILS[0] === '') {
-        throw new functions.https.HttpsError("internal", "La configuración de correos autorizados no está definida.");
-    }
+    // La lista de correos autorizados ahora está hardcodeada arriba.
+    // Ya no es necesario verificar si la configuración existe.
 
     if (!context.auth || !context.auth.token.email) {
         throw new functions.https.HttpsError("unauthenticated", "Debes iniciar sesión para realizar esta acción.");
