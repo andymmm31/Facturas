@@ -275,10 +275,17 @@ function showLoginModal() {
         modal.querySelector('#modal-login-form').onsubmit = async (e) => {
             e.preventDefault();
             const user = modal.querySelector('#modal-login-user').value.trim();
-            // Construir un correo electrónico ficticio para la autenticación de Firebase
-            const email = `${user}@invoicereports.com`;
             const password = modal.querySelector('#modal-login-password').value;
             const errorDisplay = modal.querySelector('#modal-auth-error');
+            const authorizedUsers = ["julian.s.2025", "andres.mera"];
+
+            if (!authorizedUsers.includes(user)) {
+                errorDisplay.textContent = 'Usuario no autorizado.';
+                return;
+            }
+
+            const email = `${user}@invoicereports.com`;
+
             try {
                 const credential = EmailAuthProvider.credential(email, password);
                 await linkWithCredential(auth.currentUser, credential);
