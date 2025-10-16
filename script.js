@@ -32,18 +32,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function mountApp() {
     document.getElementById('invoice-form').innerHTML = `
-        <div><label for="company-select" class="block text-sm font-medium text-gray-700">Empresa:</label><select id="company-select" required class="input-style"></select></div>
-        <div><label for="amount-input" class="block text-sm font-medium text-gray-700">Importe (€):</label><input type="number" step="0.01" id="amount-input" required class="input-style" placeholder="100.00"></div>
-        <div><label for="invoice-date-input" class="block text-sm font-medium text-gray-700">Fecha de factura:</label><input type="date" id="invoice-date-input" required class="input-style"></div>
-        <div><label for="due-date-input" class="block text-sm font-medium text-gray-700">Fecha de vencimiento:</label><input type="date" id="due-date-input" required class="input-style"></div>
-        <button type="submit" class="w-full py-2.5 px-4 bg-cyan-600 text-white font-semibold rounded-lg hover:bg-cyan-700">Guardar factura</button>
-        <p id="form-message" class="text-center text-sm mt-2"></p>`;
+        <div><label for="company-select" class="block text-sm font-medium text-slate-600">Empresa</label><select id="company-select" required class="input-style mt-1"></select></div>
+        <div><label for="amount-input" class="block text-sm font-medium text-slate-600">Importe (€)</label><input type="number" step="0.01" id="amount-input" required class="input-style mt-1" placeholder="100.00"></div>
+        <div><label for="invoice-date-input" class="block text-sm font-medium text-slate-600">Fecha de factura</label><input type="date" id="invoice-date-input" required class="input-style mt-1"></div>
+        <div><label for="due-date-input" class="block text-sm font-medium text-slate-600">Fecha de vencimiento</label><input type="date" id="due-date-input" required class="input-style mt-1"></div>
+        <button type="submit" class="w-full py-3 px-4 bg-sky-600 text-white hover:bg-sky-700">Guardar factura</button>
+        <p id="form-message" class="text-center text-sm h-4 mt-2"></p>`;
 
     document.getElementById('report-results').innerHTML = `
-        <p id="sum-title" class="text-xl font-medium text-gray-600 mb-2">Resultados del reporte</p>
+        <p id="sum-title" class="text-xl font-semibold text-slate-600 mb-2">Resultados del reporte</p>
         <div id="total-sum-display" class="text-5xl font-extrabold text-teal-600">0.00 €</div>
-        <p id="report-feedback" class="text-red-500 mt-2 font-medium"></p>
-        <button id="export-button" class="hidden mt-4 py-2 px-4 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600">Exportar a Excel</button>`;
+        <p id="report-feedback" class="text-red-500 mt-2 font-medium h-4"></p>
+        <button id="export-button" class="hidden mt-6 py-2 px-5 bg-blue-600 text-white hover:bg-blue-700">Exportar a Excel</button>`;
 
     document.getElementById('date-filter-type').innerHTML = `
         <option value="range">Filtro por rango</option>
@@ -207,17 +207,17 @@ function updateCompanyDropdown(companies) {
 
 function generateChecklist(containerId, name, items) {
     const container = document.getElementById(containerId);
-    container.innerHTML = items.length ? '' : '<p class="text-xs text-gray-500 italic">No hay datos para mostrar</p>';
+    container.innerHTML = items.length ? '' : '<p class="text-xs text-slate-500 italic">No hay datos para mostrar</p>';
     if (!items.length) return;
 
     const allId = `${name}-all`;
-    container.innerHTML = `<div class="flex items-center"><input type="checkbox" id="${allId}" class="h-4 w-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"><label for="${allId}" class="ml-3 block text-sm font-bold text-gray-800">Seleccionar todas</label></div>`;
+    container.innerHTML = `<div class="flex items-center"><input type="checkbox" id="${allId}" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"><label for="${allId}" class="ml-3 block text-sm font-bold text-slate-800">Seleccionar todas</label></div>`;
 
     items.forEach(item => {
         const itemId = `${name}-${item.replace(/\s+/g, '-')}`;
         const itemDiv = document.createElement('div');
         itemDiv.className = 'flex items-center';
-        itemDiv.innerHTML = `<input type="checkbox" name="${name}" value="${item}" id="${itemId}" class="h-4 w-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"><label for="${itemId}" class="ml-3 block text-sm text-gray-700">${item}</label>`;
+        itemDiv.innerHTML = `<input type="checkbox" name="${name}" value="${item}" id="${itemId}" class="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"><label for="${itemId}" class="ml-3 block text-sm text-slate-700">${item}</label>`;
         container.appendChild(itemDiv);
     });
 
@@ -258,17 +258,17 @@ function setupInvoiceFormListeners() {
 
 function renderRecentInvoices(invoices) {
     const list = document.getElementById('recent-invoices-list');
-    list.innerHTML = invoices.length === 0 ? '<p class="text-center text-gray-500">No hay movimientos recientes.</p>' : '';
+    list.innerHTML = invoices.length === 0 ? '<p class="text-center text-slate-500">No hay movimientos recientes.</p>' : '';
     invoices.forEach(inv => {
         const date = inv.timestamp ? new Date(inv.timestamp.seconds * 1000).toLocaleDateString('es-ES') : 'N/A';
         const div = document.createElement('div');
-        div.className = 'p-3 bg-white rounded-lg flex justify-between items-center card-shadow hover:shadow-md transition-shadow';
+        div.className = 'p-4 bg-white rounded-xl flex justify-between items-center card-shadow hover:shadow-lg transition-shadow';
         div.innerHTML = `
             <div>
-                <span class="font-bold text-cyan-700">${inv.company}</span>
-                <span class="text-gray-500 text-sm ml-2">${date}</span>
+                <span class="font-bold text-sky-700">${inv.company}</span>
+                <span class="text-slate-500 text-sm ml-3">${date}</span>
             </div>
-            <div class="font-semibold text-lg text-green-600">${inv.amount.toFixed(2)} €</div>`;
+            <div class="font-semibold text-xl text-teal-600">${inv.amount.toFixed(2)} €</div>`;
         list.appendChild(div);
     });
 }
@@ -298,8 +298,8 @@ function showLoginModal() {
         <form id="modal-login-form" class="space-y-4">
             <input type="text" id="modal-login-user" placeholder="Usuario" required class="input-style">
             <input type="password" id="modal-login-password" placeholder="Contraseña" required class="input-style">
-            <p id="modal-auth-error" class="text-red-500 text-center"></p>
-            <a href="#" id="modal-forgot-password" class="text-sm text-cyan-600 hover:underline">¿Olvidaste tu contraseña?</a>
+            <p id="modal-auth-error" class="text-red-500 text-center h-4"></p>
+            <a href="#" id="modal-forgot-password" class="text-sm text-sky-600 hover:underline block text-center">¿Olvidaste tu contraseña?</a>
         </form>`;
     modal.classList.remove('hidden');
 
@@ -424,16 +424,16 @@ async function handleDeleteCompany(companyName) {
 
 function renderCompanyList(companies) {
     const listContainer = document.getElementById('company-list');
-    listContainer.innerHTML = companies.length ? '' : '<p class="text-xs text-gray-500 italic">No hay empresas registradas.</p>';
+    listContainer.innerHTML = companies.length ? '' : '<p class="text-xs text-slate-500 italic">No hay empresas registradas.</p>';
 
     companies.forEach(company => {
         const div = document.createElement('div');
-        div.className = 'company-item flex justify-between items-center p-2 bg-white rounded-lg border border-gray-200';
+        div.className = 'company-item flex justify-between items-center p-3 bg-white rounded-lg border border-slate-200';
         div.dataset.companyName = company.name;
         div.innerHTML = `
-            <span class="company-name font-medium text-gray-800">${company.name}</span>
+            <span class="company-name font-medium text-slate-800">${company.name}</span>
             <div>
-                <button class="edit-btn text-sm text-blue-600 hover:text-blue-800 font-semibold mr-3">Editar</button>
+                <button class="edit-btn text-sm text-sky-600 hover:text-sky-800 font-semibold mr-3">Editar</button>
                 <button class="delete-btn text-sm text-red-600 hover:text-red-800 font-semibold">Eliminar</button>
             </div>
         `;
