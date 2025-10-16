@@ -103,36 +103,35 @@ exports.deleteCompany = functions.https.onCall(async (data, context) => {
 exports.calculateReport = functions.https.onCall(async (data, context) => {
     checkAuth(context);
 
+    const { appId, selectedCompanies, filterType, selectedDates, startDate, endDate, rangeType } = data;
+    const invoicesRef = db.collection(`artifacts/${appId}/public/data/invoices`);
+    let query = invoicesRef;
+
+    if (selectedCompanies && selectedCompanies.length > 0) {
+        query = query.where("company", "in", selectedCompanies);
+    }
+
     try {
-        const { appId, selectedCompanies, filterType, selectedInvoiceDates, selectedDueDates, startDate, endDate, rangeType } = data;
-        let query = db.collection(`artifacts/${appId}/public/data/invoices`);
-
-        if (selectedCompanies && selectedCompanies.length > 0) {
-            query = query.where("company", "in", selectedCompanies);
-        }
-
         const snapshot = await query.get();
         let filteredInvoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // Aplicar filtros de fecha en memoria
-        if (filterType === 'invoiceDate') {
-            if (selectedInvoiceDates && selectedInvoiceDates.length > 0) {
-                filteredInvoices = filteredInvoices.filter(inv => selectedInvoiceDates.includes(inv.invoiceDate));
-            }
-        } else if (filterType === 'dueDate') {
-            if (selectedDueDates && selectedDueDates.length > 0) {
-                filteredInvoices = filteredInvoices.filter(inv => selectedDueDates.includes(inv.dueDate));
-            }
-        } else if (filterType === 'range' && (startDate || endDate)) {
-            filteredInvoices = filteredInvoices.filter(inv => {
-                const checkInvoiceDate = !inv.invoiceDate || ((!startDate || inv.invoiceDate >= startDate) && (!endDate || inv.invoiceDate <= endDate));
-                const checkDueDate = !inv.dueDate || ((!startDate || inv.dueDate >= startDate) && (!endDate || inv.dueDate <= endDate));
+        if (filterType === 'range') {
+            if (startDate || endDate) {
+                filteredInvoices = filteredInvoices.filter(inv => {
+                    const invoiceDate = inv.invoiceDate;
+                    const dueDate = inv.dueDate;
+                    const checkInvoice = invoiceDate && (!startDate || invoiceDate >= startDate) && (!endDate || invoiceDate <= endDate);
+                    const checkDue = dueDate && (!startDate || dueDate >= startDate) && (!endDate || dueDate <= endDate);
 
-                if (rangeType === 'invoiceDate') return checkInvoiceDate;
-                if (rangeType === 'dueDate') return checkDueDate;
-                if (rangeType === 'both') return checkInvoiceDate || checkDueDate;
-                return true;
-            });
+                    if (rangeType === 'invoiceDate') return checkInvoice;
+                    if (rangeType === 'dueDate') return checkDue;
+                    if (rangeType === 'both') return checkInvoice || checkDue;
+                    return true;
+                });
+            }
+        } else if (selectedDates && selectedDates.length > 0) {
+            const dateField = filterType === 'invoiceDate' ? 'invoiceDate' : 'dueDate';
+            filteredInvoices = filteredInvoices.filter(inv => selectedDates.includes(inv[dateField]));
         }
 
         const totalSum = filteredInvoices.reduce((sum, inv) => sum + (inv.amount || 0), 0);
@@ -140,9 +139,8 @@ exports.calculateReport = functions.https.onCall(async (data, context) => {
         return {
             totalSum: totalSum,
             invoiceCount: filteredInvoices.length,
-            invoices: filteredInvoices // Devolver los datos para la exportación
+            invoices: filteredInvoices,
         };
-
     } catch (error) {
         console.error("Error al calcular el reporte:", error);
         throw new functions.https.HttpsError("internal", "Ocurrió un error interno al procesar el reporte.");

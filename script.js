@@ -32,18 +32,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function mountApp() {
     document.getElementById('invoice-form').innerHTML = `
-        <div><label for="company-select" class="block text-sm font-medium text-gray-700">Empresa:</label><select id="company-select" required class="w-full input-style"></select></div>
-        <div><label for="amount-input" class="block text-sm font-medium text-gray-700">Importe (€):</label><input type="number" step="0.01" id="amount-input" required class="w-full input-style" placeholder="100.00"></div>
-        <div><label for="invoice-date-input" class="block text-sm font-medium text-gray-700">Fecha de Factura:</label><input type="date" id="invoice-date-input" required class="w-full input-style"></div>
-        <div><label for="due-date-input" class="block text-sm font-medium text-gray-700">Fecha de Vencimiento:</label><input type="date" id="due-date-input" required class="w-full input-style"></div>
-        <button type="submit" class="w-full py-3 px-4 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700">Guardar Factura</button>
-        <p id="form-message" class="text-center"></p>`;
+        <div><label for="company-select" class="block text-sm font-medium text-gray-700">Empresa:</label><select id="company-select" required class="input-style"></select></div>
+        <div><label for="amount-input" class="block text-sm font-medium text-gray-700">Importe (€):</label><input type="number" step="0.01" id="amount-input" required class="input-style" placeholder="100.00"></div>
+        <div><label for="invoice-date-input" class="block text-sm font-medium text-gray-700">Fecha de factura:</label><input type="date" id="invoice-date-input" required class="input-style"></div>
+        <div><label for="due-date-input" class="block text-sm font-medium text-gray-700">Fecha de vencimiento:</label><input type="date" id="due-date-input" required class="input-style"></div>
+        <button type="submit" class="w-full py-2.5 px-4 bg-cyan-600 text-white font-semibold rounded-lg hover:bg-cyan-700">Guardar factura</button>
+        <p id="form-message" class="text-center text-sm mt-2"></p>`;
 
     document.getElementById('report-results').innerHTML = `
-        <p id="sum-title" class="text-xl font-medium text-gray-700 mb-2">Resultados del Reporte</p>
-        <div id="total-sum-display" class="text-5xl font-extrabold text-green-700">0.00 €</div>
+        <p id="sum-title" class="text-xl font-medium text-gray-600 mb-2">Resultados del reporte</p>
+        <div id="total-sum-display" class="text-5xl font-extrabold text-teal-600">0.00 €</div>
         <p id="report-feedback" class="text-red-500 mt-2 font-medium"></p>
-        <button id="export-button" class="hidden mt-4 py-2 px-4 bg-blue-500 text-white rounded-lg">Exportar a Excel</button>`;
+        <button id="export-button" class="hidden mt-4 py-2 px-4 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600">Exportar a Excel</button>`;
+
+    document.getElementById('date-filter-type').innerHTML = `
+        <option value="range">Filtro por rango</option>
+        <option value="invoiceDate">Por fecha de factura</option>
+        <option value="dueDate">Por fecha de vencimiento</option>`;
 }
 
 function setupAuthListeners() {
@@ -61,10 +66,16 @@ function setupAuthListeners() {
 function updateUIForUser(user) {
     const isAnon = user.isAnonymous;
     const isAuthorized = user.email && AUTHORIZED_USERS_EMAIL.includes(user.email);
+    const userIdDisplay = document.getElementById('user-id-display');
 
-    document.getElementById('user-id-display').textContent = isAnon ? `ID de sesión: ${user.uid.substring(0, 8)}...` : `Usuario: ${user.email}`;
+    if (isAuthorized) {
+        userIdDisplay.textContent = `Usuario: ${user.email.split('@')[0]}`;
+    } else {
+        userIdDisplay.textContent = '';
+    }
+
     document.getElementById('logout-button').classList.toggle('hidden', isAnon);
-    document.getElementById('change-password-section').classList.toggle('hidden', isAnon);
+    document.getElementById('change-password-section').classList.toggle('hidden', isAnon || !isAuthorized);
     document.getElementById('company-management-section').classList.toggle('hidden', !isAuthorized);
 }
 
@@ -124,16 +135,20 @@ async function handleCalculateClick() {
     calculateBtn.textContent = 'Calculando...';
     document.getElementById('export-button').classList.add('hidden');
 
+    const filterType = document.getElementById('date-filter-type').value;
     const reportParams = {
         appId: firebaseConfig.appId,
         selectedCompanies: getCheckedValues('company-filter'),
-        filterType: document.getElementById('date-filter-type').value,
-        selectedInvoiceDates: getCheckedValues('invoice-date-filter'),
-        selectedDueDates: getCheckedValues('due-date-filter'),
-        startDate: document.getElementById('start-date-filter').value,
-        endDate: document.getElementById('end-date-filter').value,
-        rangeType: document.querySelector('input[name="range-type"]:checked').value
+        filterType: filterType,
     };
+
+    if (filterType === 'range') {
+        reportParams.startDate = document.getElementById('start-date-filter').value;
+        reportParams.endDate = document.getElementById('end-date-filter').value;
+        reportParams.rangeType = document.querySelector('input[name="range-type"]:checked').value;
+    } else {
+        reportParams.selectedDates = getCheckedValues(filterType === 'invoiceDate' ? 'invoice-date-filter' : 'due-date-filter');
+    }
 
     try {
         const calculateReportCallable = httpsCallable(functions, 'calculateReport');
@@ -151,7 +166,7 @@ async function handleCalculateClick() {
         document.getElementById('report-feedback').textContent = error.message || "Ocurrió un error.";
     } finally {
         calculateBtn.disabled = false;
-        calculateBtn.textContent = 'Calcular Total';
+        calculateBtn.textContent = 'Calcular total';
     }
 }
 
@@ -192,15 +207,20 @@ function updateCompanyDropdown(companies) {
 
 function generateChecklist(containerId, name, items) {
     const container = document.getElementById(containerId);
-    container.innerHTML = items.length ? '' : '<p class="text-xs text-gray-500 italic">No hay datos</p>';
+    container.innerHTML = items.length ? '' : '<p class="text-xs text-gray-500 italic">No hay datos para mostrar</p>';
     if (!items.length) return;
 
     const allId = `${name}-all`;
-    container.innerHTML = `<div><input type="checkbox" id="${allId}"><label for="${allId}" class="ml-2 font-bold">Seleccionar Todas</label></div>`;
+    container.innerHTML = `<div class="flex items-center"><input type="checkbox" id="${allId}" class="h-4 w-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"><label for="${allId}" class="ml-3 block text-sm font-bold text-gray-800">Seleccionar todas</label></div>`;
+
     items.forEach(item => {
         const itemId = `${name}-${item.replace(/\s+/g, '-')}`;
-        container.innerHTML += `<div><input type="checkbox" name="${name}" value="${item}" id="${itemId}"><label for="${itemId}" class="ml-2">${item}</label></div>`;
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'flex items-center';
+        itemDiv.innerHTML = `<input type="checkbox" name="${name}" value="${item}" id="${itemId}" class="h-4 w-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"><label for="${itemId}" class="ml-3 block text-sm text-gray-700">${item}</label>`;
+        container.appendChild(itemDiv);
     });
+
     document.getElementById(allId).addEventListener('change', (e) => {
         document.querySelectorAll(`input[name="${name}"]`).forEach(cb => cb.checked = e.target.checked);
     });
@@ -225,20 +245,31 @@ function setupInvoiceFormListeners() {
         try {
             await addDoc(collection(db, `artifacts/${firebaseConfig.appId}/public/data/invoices`), { company, amount, invoiceDate, dueDate, userId: currentUserId, timestamp: serverTimestamp() });
             msg.textContent = '¡Factura registrada!';
+            msg.style.color = 'green';
             form.reset();
         } catch (error) {
             msg.textContent = 'Error al guardar.';
+            msg.style.color = 'red';
             console.error(error);
         }
+        setTimeout(() => msg.textContent = '', 3000);
     });
 }
 
 function renderRecentInvoices(invoices) {
     const list = document.getElementById('recent-invoices-list');
-    list.innerHTML = invoices.length === 0 ? '<p>No hay facturas.</p>' : '';
+    list.innerHTML = invoices.length === 0 ? '<p class="text-center text-gray-500">No hay movimientos recientes.</p>' : '';
     invoices.forEach(inv => {
         const date = inv.timestamp ? new Date(inv.timestamp.seconds * 1000).toLocaleDateString('es-ES') : 'N/A';
-        list.innerHTML += `<div class="p-3 bg-white rounded-lg mb-2 flex justify-between items-center card-shadow"><div><span class="font-bold text-indigo-700">${inv.company}</span> | <span class="text-gray-600">${date}</span></div><div class="font-semibold text-lg text-green-600">${inv.amount.toFixed(2)} €</div></div>`;
+        const div = document.createElement('div');
+        div.className = 'p-3 bg-white rounded-lg flex justify-between items-center card-shadow hover:shadow-md transition-shadow';
+        div.innerHTML = `
+            <div>
+                <span class="font-bold text-cyan-700">${inv.company}</span>
+                <span class="text-gray-500 text-sm ml-2">${date}</span>
+            </div>
+            <div class="font-semibold text-lg text-green-600">${inv.amount.toFixed(2)} €</div>`;
+        list.appendChild(div);
     });
 }
 
@@ -259,16 +290,16 @@ function handleExport() {
 let modalResolve = null;
 function showLoginModal() {
     const modal = document.getElementById('generic-modal');
-    modal.querySelector('#modal-title').textContent = 'Iniciar Sesión para Reportes';
+    modal.querySelector('#modal-title').textContent = 'Iniciar sesión para reportes';
     modal.querySelector('#modal-confirm-btn').textContent = 'Entrar';
     modal.querySelector('#modal-cancel-btn').textContent = 'Cancelar';
 
     modal.querySelector('#modal-content').innerHTML = `
         <form id="modal-login-form" class="space-y-4">
-            <input type="text" id="modal-login-user" placeholder="Usuario" required class="w-full input-style">
-            <input type="password" id="modal-login-password" placeholder="Contraseña" required class="w-full input-style">
+            <input type="text" id="modal-login-user" placeholder="Usuario" required class="input-style">
+            <input type="password" id="modal-login-password" placeholder="Contraseña" required class="input-style">
             <p id="modal-auth-error" class="text-red-500 text-center"></p>
-            <a href="#" id="modal-forgot-password" class="text-sm text-indigo-600 hover:underline">¿Olvidaste tu contraseña?</a>
+            <a href="#" id="modal-forgot-password" class="text-sm text-cyan-600 hover:underline">¿Olvidaste tu contraseña?</a>
         </form>`;
     modal.classList.remove('hidden');
 
@@ -309,7 +340,6 @@ function setupModalListeners() {
         document.getElementById('generic-modal').classList.add('hidden');
         if (modalResolve) modalResolve(false);
     });
-    // El botón de confirmar es manejado por el onsubmit del formulario dentro de showLoginModal
 }
 
 function setupCompanyManagementListeners() {
@@ -398,13 +428,13 @@ function renderCompanyList(companies) {
 
     companies.forEach(company => {
         const div = document.createElement('div');
-        div.className = 'company-item flex justify-between items-center p-2 bg-gray-50 rounded-lg';
+        div.className = 'company-item flex justify-between items-center p-2 bg-white rounded-lg border border-gray-200';
         div.dataset.companyName = company.name;
         div.innerHTML = `
-            <span class="company-name">${company.name}</span>
+            <span class="company-name font-medium text-gray-800">${company.name}</span>
             <div>
-                <button class="edit-btn text-sm text-blue-600 hover:underline mr-2">Editar</button>
-                <button class="delete-btn text-sm text-red-600 hover:underline">Eliminar</button>
+                <button class="edit-btn text-sm text-blue-600 hover:text-blue-800 font-semibold mr-3">Editar</button>
+                <button class="delete-btn text-sm text-red-600 hover:text-red-800 font-semibold">Eliminar</button>
             </div>
         `;
         listContainer.appendChild(div);

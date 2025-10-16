@@ -3,103 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestión de Facturas y Reportes</title>
+    <title>Gestión de facturas</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
-<body>
+<body class="bg-gray-50" style="font-family: 'Inter', sans-serif;">
 
     <div id="app-container" class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-        <header class="mb-6 pb-4 border-b border-indigo-200 flex justify-between items-center">
+        <header class="mb-8 pb-4 border-b border-gray-200 flex justify-between items-center">
             <div>
-                <h1 class="text-3xl font-extrabold text-indigo-800">Sistema de Gestión de Facturas</h1>
-                <p id="user-id-display" class="text-sm text-gray-500 mt-1">Cargando...</p>
+                <h1 class="text-3xl font-extrabold text-gray-800">Sistema de gestión de facturas</h1>
+                <p id="user-id-display" class="text-sm text-gray-600 mt-1 font-medium"></p>
             </div>
-            <button id="logout-button" class="hidden py-2 px-4 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600">Cerrar Sesión</button>
+            <button id="logout-button" class="hidden py-2 px-4 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-700">Cerrar sesión</button>
         </header>
 
         <div id="main-content" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div id="company-management-section" class="hidden lg:col-span-3 bg-white p-6 rounded-xl card-shadow">
-                <h2 class="text-2xl font-bold mb-5 text-indigo-700">Gestionar Empresas</h2>
+                <h2 class="text-2xl font-bold mb-5 text-gray-700">Gestionar empresas</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                        <h3 class="text-lg font-semibold mb-3">Agregar Nueva Empresa</h3>
+                        <h3 class="text-lg font-semibold mb-3 text-gray-600">Agregar nueva empresa</h3>
                         <form id="add-company-form" class="flex items-center space-x-2">
                             <input type="text" id="new-company-name" placeholder="Nombre de la empresa" required class="input-style flex-grow">
-                            <button type="submit" class="py-2 px-4 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600">Agregar</button>
+                            <button type="submit" class="py-2 px-4 bg-cyan-600 text-white font-semibold rounded-lg hover:bg-cyan-700">Agregar</button>
                         </form>
                         <p id="company-form-feedback" class="text-sm mt-2"></p>
                     </div>
                     <div>
-                        <h3 class="text-lg font-semibold mb-3">Empresas Existentes</h3>
-                        <div id="company-list" class="space-y-2 max-h-60 overflow-y-auto p-2 border rounded-lg">
+                        <h3 class="text-lg font-semibold mb-3 text-gray-600">Empresas existentes</h3>
+                        <div id="company-list" class="space-y-2 max-h-60 overflow-y-auto p-3 bg-gray-50 border rounded-lg">
                             <!-- La lista de empresas se insertará aquí -->
                         </div>
                     </div>
                 </div>
             </div>
             <div class="lg:col-span-1 bg-white p-6 rounded-xl card-shadow h-fit">
-                <h2 class="text-2xl font-bold mb-5 text-indigo-700">1. Registrar Factura</h2>
+                <h2 class="text-2xl font-bold mb-5 text-gray-700">1. Registrar factura</h2>
                 <form id="invoice-form" class="space-y-4">
-                    <!-- Formulario de factura -->
+                    <!-- El formulario se genera dinámicamente -->
                 </form>
             </div>
             <div class="lg:col-span-2 bg-white p-6 rounded-xl card-shadow">
-                <h2 class="text-2xl font-bold mb-5 text-indigo-700">2. Reporte Acumulado (Seguro)</h2>
-                <div id="report-section" class="p-6 bg-indigo-50 border-2 border-indigo-200 rounded-xl mb-6 space-y-4">
+                <h2 class="text-2xl font-bold mb-5 text-gray-700">2. Reporte acumulado</h2>
+                <div id="report-section" class="p-6 bg-gray-50 border-2 border-gray-200 rounded-xl mb-6 space-y-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Empresas:</label>
                         <div id="report-company-filter-container" class="p-2 border rounded-lg bg-white max-h-32 overflow-y-auto"></div>
                     </div>
                     <div>
-                        <label for="date-filter-type" class="block text-sm font-medium text-gray-700 mb-1">Tipo de Filtro de Fecha:</label>
-                        <select id="date-filter-type" class="input-style w-full">
-                            <option value="range">Filtro por rango</option>
-                            <option value="invoiceDate">Por fecha de factura</option>
-                            <option value="dueDate">Por fecha de vencimiento</option>
-                        </select>
+                        <label for="date-filter-type" class="block text-sm font-medium text-gray-700 mb-1">Tipo de filtro de fecha:</label>
+                        <select id="date-filter-type" class="input-style w-full"></select>
                     </div>
-
-                    <!-- Contenedor para el Filtro por Rango -->
                     <div id="range-filter-container" class="space-y-4">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <input type="date" id="start-date-filter" class="input-style w-full">
                             <input type="date" id="end-date-filter" class="input-style w-full">
                         </div>
                         <div class="flex justify-center items-center space-x-4">
-                            <label><input type="radio" name="range-type" value="invoiceDate" checked> Fecha Factura</label>
-                            <label><input type="radio" name="range-type" value="dueDate"> Fecha Vencimiento</label>
-                            <label><input type="radio" name="range-type" value="both"> Ambas</label>
+                            <label><input type="radio" name="range-type" value="invoiceDate" checked class="text-cyan-600 focus:ring-cyan-500"> Fecha factura</label>
+                            <label><input type="radio" name="range-type" value="dueDate" class="text-cyan-600 focus:ring-cyan-500"> Fecha vencimiento</label>
+                            <label><input type="radio" name="range-type" value="both" class="text-cyan-600 focus:ring-cyan-500"> Ambas</label>
                         </div>
                     </div>
-
-                    <!-- Contenedor para el Filtro por Fecha de Factura (Checklist) -->
                     <div id="invoice-date-filter-container" class="hidden p-2 border rounded-lg bg-white max-h-32 overflow-y-auto"></div>
-
-                    <!-- Contenedor para el Filtro por Fecha de Vencimiento (Checklist) -->
                     <div id="due-date-filter-container" class="hidden p-2 border rounded-lg bg-white max-h-32 overflow-y-auto"></div>
-
-                    <div class="pt-4 border-t">
-                        <button id="calculate-sum-button" class="w-full py-2 px-4 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600 transition">Calcular Total</button>
+                    <div class="pt-4 border-t border-gray-200">
+                        <button id="calculate-sum-button" class="w-full py-2.5 px-4 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition">Calcular total</button>
                     </div>
                 </div>
                 <div id="report-results" class="text-center p-8 bg-gray-100 rounded-xl border-dashed border-2 border-gray-300">
-                    <!-- Resultados se insertarán aquí -->
+                    <!-- Los resultados se insertarán aquí -->
                 </div>
-
-                <!-- Nueva sección para cambiar contraseña -->
-                <div id="change-password-section" class="hidden mt-6 pt-4 border-t">
-                    <button id="change-password-btn" class="py-2 px-4 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600">Cambiar Contraseña</button>
+                <div id="change-password-section" class="hidden mt-6 pt-4 border-t border-gray-200">
+                    <button id="change-password-btn" class="py-2 px-4 bg-slate-500 text-white font-semibold rounded-lg hover:bg-slate-600">Cambiar contraseña</button>
                     <form id="change-password-form" class="hidden mt-4 space-y-2">
-                        <input type="password" id="new-password-input" placeholder="Nueva Contraseña" required class="w-full input-style max-w-xs mx-auto">
-                        <button type="submit" class="py-2 px-4 bg-indigo-600 text-white rounded-lg">Confirmar Cambio</button>
+                        <input type="password" id="new-password-input" placeholder="Nueva contraseña" required class="w-full input-style max-w-xs mx-auto">
+                        <button type="submit" class="py-2 px-4 bg-cyan-600 text-white rounded-lg">Confirmar cambio</button>
                         <p id="change-password-feedback" class="text-sm"></p>
                     </form>
                 </div>
             </div>
             <div class="lg:col-span-3 bg-white p-6 rounded-xl card-shadow">
-                <h2 class="text-2xl font-bold mb-5 text-indigo-700">3. Últimos Movimientos</h2>
+                <h2 class="text-2xl font-bold mb-5 text-gray-700">3. Últimos movimientos</h2>
                 <div id="recent-invoices-list" class="space-y-3"></div>
             </div>
         </div>
@@ -110,8 +100,8 @@
             <h3 id="modal-title" class="text-xl font-bold text-gray-800 mb-4"></h3>
             <div id="modal-content"></div>
             <div class="flex justify-end space-x-3 mt-6">
-                <button id="modal-cancel-btn" class="py-2 px-4 bg-gray-300">Cancelar</button>
-                <button id="modal-confirm-btn" class="py-2 px-4 bg-indigo-600 text-white">Confirmar</button>
+                <button id="modal-cancel-btn" class="py-2 px-4 bg-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-400">Cancelar</button>
+                <button id="modal-confirm-btn" class="py-2 px-4 bg-cyan-600 text-white font-semibold rounded-lg hover:bg-cyan-700">Confirmar</button>
             </div>
         </div>
     </div>
