@@ -1,14 +1,16 @@
 import { firebaseConfig } from "./config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInAnonymously, EmailAuthProvider, linkWithCredential, sendPasswordResetEmail, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, onSnapshot, collection, query, addDoc, serverTimestamp, getDocs, where, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getAuth, onAuthStateChanged, signInAnonymously, EmailAuthProvider, linkWithCredential, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, onSnapshot, collection, query, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-functions.js";
 
 // --- Variables Globales ---
 let app, auth, db, functions;
 let currentUserId = null;
 let allInvoices = [];
+let allCompanies = [];
 let lastExportedInvoices = [];
+const AUTHORIZED_USERS_EMAIL = ["julian.s.2025@invoicereports.com", "andres.mera@invoicereports.com"];
 
 // --- Inicialización ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -31,14 +33,12 @@ document.addEventListener('DOMContentLoaded', () => {
 function mountApp() {
     document.getElementById('invoice-form').innerHTML = `
         <div><label for="company-select" class="block text-sm font-medium text-gray-700">Empresa:</label><select id="company-select" required class="w-full input-style"></select></div>
-        <div id="new-company-input-container" class="hidden"><label for="new-company-input" class="block text-sm font-medium text-gray-700">Nombre Nueva Empresa:</label><input type="text" id="new-company-input" class="w-full input-style" placeholder="Nombre completo"></div>
         <div><label for="amount-input" class="block text-sm font-medium text-gray-700">Importe (€):</label><input type="number" step="0.01" id="amount-input" required class="w-full input-style" placeholder="100.00"></div>
         <div><label for="invoice-date-input" class="block text-sm font-medium text-gray-700">Fecha de Factura:</label><input type="date" id="invoice-date-input" required class="w-full input-style"></div>
         <div><label for="due-date-input" class="block text-sm font-medium text-gray-700">Fecha de Vencimiento:</label><input type="date" id="due-date-input" required class="w-full input-style"></div>
         <button type="submit" class="w-full py-3 px-4 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700">Guardar Factura</button>
         <p id="form-message" class="text-center"></p>`;
 
-    // El contenido de report-section ahora está definido estáticamente en index.html
     document.getElementById('report-results').innerHTML = `
         <p id="sum-title" class="text-xl font-medium text-gray-700 mb-2">Resultados del Reporte</p>
         <div id="total-sum-display" class="text-5xl font-extrabold text-green-700">0.00 €</div>
@@ -60,9 +60,12 @@ function setupAuthListeners() {
 
 function updateUIForUser(user) {
     const isAnon = user.isAnonymous;
+    const isAuthorized = user.email && AUTHORIZED_USERS_EMAIL.includes(user.email);
+
     document.getElementById('user-id-display').textContent = isAnon ? `ID de sesión: ${user.uid.substring(0, 8)}...` : `Usuario: ${user.email}`;
     document.getElementById('logout-button').classList.toggle('hidden', isAnon);
     document.getElementById('change-password-section').classList.toggle('hidden', isAnon);
+    document.getElementById('company-management-section').classList.toggle('hidden', !isAuthorized);
 }
 
 function setupEventListeners() {
@@ -77,7 +80,8 @@ function setupEventListeners() {
         document.getElementById('due-date-filter-container').classList.toggle('hidden', selection !== 'dueDate');
     });
 
-    setupAdminControlsListeners();
+    setupInvoiceFormListeners();
+    setupCompanyManagementListeners();
     setupModalListeners();
     setupChangePasswordListeners();
 }
@@ -87,15 +91,12 @@ function setupChangePasswordListeners() {
     const changePassForm = document.getElementById('change-password-form');
     const feedbackEl = document.getElementById('change-password-feedback');
 
-    changePassBtn.addEventListener('click', () => {
-        changePassForm.classList.toggle('hidden');
-    });
+    changePassBtn.addEventListener('click', () => changePassForm.classList.toggle('hidden'));
 
     changePassForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const newPassword = document.getElementById('new-password-input').value;
         feedbackEl.textContent = 'Cambiando...';
-
         try {
             await updatePassword(auth.currentUser, newPassword);
             feedbackEl.textContent = '¡Contraseña cambiada con éxito!';
@@ -123,33 +124,23 @@ async function handleCalculateClick() {
     calculateBtn.textContent = 'Calculando...';
     document.getElementById('export-button').classList.add('hidden');
 
-    const filterType = document.getElementById('date-filter-type').value;
-    let reportParams = {
+    const reportParams = {
+        appId: firebaseConfig.appId,
         selectedCompanies: getCheckedValues('company-filter'),
-        filterType: filterType,
-        selectedInvoiceDates: [],
-        selectedDueDates: [],
-        startDate: null,
-        endDate: null,
-        rangeType: null
+        filterType: document.getElementById('date-filter-type').value,
+        selectedInvoiceDates: getCheckedValues('invoice-date-filter'),
+        selectedDueDates: getCheckedValues('due-date-filter'),
+        startDate: document.getElementById('start-date-filter').value,
+        endDate: document.getElementById('end-date-filter').value,
+        rangeType: document.querySelector('input[name="range-type"]:checked').value
     };
-
-    if (filterType === 'range') {
-        reportParams.startDate = document.getElementById('start-date-filter').value;
-        reportParams.endDate = document.getElementById('end-date-filter').value;
-        reportParams.rangeType = document.querySelector('input[name="range-type"]:checked').value;
-    } else if (filterType === 'invoiceDate') {
-        reportParams.selectedInvoiceDates = getCheckedValues('invoice-date-filter');
-    } else if (filterType === 'dueDate') {
-        reportParams.selectedDueDates = getCheckedValues('due-date-filter');
-    }
 
     try {
         const calculateReportCallable = httpsCallable(functions, 'calculateReport');
         const result = await calculateReportCallable(reportParams);
         const { totalSum, invoiceCount, invoices } = result.data;
 
-        lastExportedInvoices = invoices; // Guardar para exportar
+        lastExportedInvoices = invoices;
         document.getElementById('total-sum-display').textContent = `${totalSum.toFixed(2)} €`;
         document.getElementById('sum-title').textContent = `Total para la selección (${invoiceCount} facturas):`;
         document.getElementById('report-feedback').textContent = '';
@@ -169,18 +160,25 @@ function getCheckedValues(name) {
 }
 
 function setupFirestoreListeners() {
+    const companiesQuery = query(collection(db, `artifacts/${firebaseConfig.appId}/public/data/companies`));
+    onSnapshot(companiesQuery, (snapshot) => {
+        allCompanies = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })).sort((a, b) => a.name.localeCompare(b.name));
+        const companyNames = allCompanies.map(c => c.name);
+
+        renderCompanyList(allCompanies);
+        updateCompanyDropdown(companyNames);
+        generateChecklist('report-company-filter-container', 'company-filter', companyNames);
+    });
+
     const invoicesQuery = query(collection(db, `artifacts/${firebaseConfig.appId}/public/data/invoices`));
     onSnapshot(invoicesQuery, (snapshot) => {
         allInvoices = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
         allInvoices.sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
 
-        const companies = [...new Set(allInvoices.map(inv => inv.company).filter(Boolean))].sort();
         const invoiceDates = [...new Set(allInvoices.map(inv => inv.invoiceDate).filter(Boolean))].sort();
         const dueDates = [...new Set(allInvoices.map(inv => inv.dueDate).filter(Boolean))].sort();
 
         renderRecentInvoices(allInvoices.slice(0, 10));
-        updateCompanyDropdown(companies);
-        generateChecklist('report-company-filter-container', 'company-filter', companies);
         generateChecklist('invoice-date-filter-container', 'invoice-date-filter', invoiceDates);
         generateChecklist('due-date-filter-container', 'due-date-filter', dueDates);
     });
@@ -190,7 +188,6 @@ function updateCompanyDropdown(companies) {
     const select = document.getElementById('company-select');
     select.innerHTML = '<option value="" disabled selected>Selecciona una empresa</option>';
     companies.forEach(c => select.innerHTML += `<option value="${c}">${c}</option>`);
-    select.innerHTML += '<option value="__NEW_COMPANY__">--- Agregar Nueva Empresa ---</option>';
 }
 
 function generateChecklist(containerId, name, items) {
@@ -199,7 +196,7 @@ function generateChecklist(containerId, name, items) {
     if (!items.length) return;
 
     const allId = `${name}-all`;
-    container.innerHTML += `<div><input type="checkbox" id="${allId}"><label for="${allId}" class="ml-2 font-bold">Seleccionar Todas</label></div>`;
+    container.innerHTML = `<div><input type="checkbox" id="${allId}"><label for="${allId}" class="ml-2 font-bold">Seleccionar Todas</label></div>`;
     items.forEach(item => {
         const itemId = `${name}-${item.replace(/\s+/g, '-')}`;
         container.innerHTML += `<div><input type="checkbox" name="${name}" value="${item}" id="${itemId}"><label for="${itemId}" class="ml-2">${item}</label></div>`;
@@ -209,25 +206,30 @@ function generateChecklist(containerId, name, items) {
     });
 }
 
-function setupAdminControlsListeners() {
-    document.getElementById('company-select').addEventListener('change', (e) => {
-        document.getElementById('new-company-input-container').classList.toggle('hidden', e.target.value !== '__NEW_COMPANY__');
-    });
+function setupInvoiceFormListeners() {
     document.getElementById('invoice-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const form = e.target;
         const msg = document.getElementById('form-message');
         msg.textContent = 'Guardando...';
-        const company = form.elements['company-select'].value === '__NEW_COMPANY__' ? form.elements['new-company-input'].value.trim() : form.elements['company-select'].value;
+
+        const company = form.elements['company-select'].value;
         const amount = parseFloat(form.elements['amount-input'].value);
         const invoiceDate = form.elements['invoice-date-input'].value;
         const dueDate = form.elements['due-date-input'].value;
-        if (!company || !amount || !invoiceDate || !dueDate) { msg.textContent = 'Todos los campos son obligatorios.'; return; }
+
+        if (!company || !amount || !invoiceDate || !dueDate) {
+            msg.textContent = 'Todos los campos son obligatorios.';
+            return;
+        }
         try {
             await addDoc(collection(db, `artifacts/${firebaseConfig.appId}/public/data/invoices`), { company, amount, invoiceDate, dueDate, userId: currentUserId, timestamp: serverTimestamp() });
             msg.textContent = '¡Factura registrada!';
             form.reset();
-        } catch (error) { msg.textContent = 'Error al guardar.'; }
+        } catch (error) {
+            msg.textContent = 'Error al guardar.';
+            console.error(error);
+        }
     });
 }
 
@@ -272,11 +274,11 @@ function showLoginModal() {
 
     return new Promise(resolve => {
         modalResolve = resolve;
-        modal.querySelector('#modal-login-form').onsubmit = async (e) => {
+        document.getElementById('modal-login-form').onsubmit = async (e) => {
             e.preventDefault();
-            const user = modal.querySelector('#modal-login-user').value.trim();
-            const password = modal.querySelector('#modal-login-password').value;
-            const errorDisplay = modal.querySelector('#modal-auth-error');
+            const user = document.getElementById('modal-login-user').value.trim();
+            const password = document.getElementById('modal-login-password').value;
+            const errorDisplay = document.getElementById('modal-auth-error');
             const authorizedUsers = ["julian.s.2025", "andres.mera"];
 
             if (!authorizedUsers.includes(user)) {
@@ -285,7 +287,6 @@ function showLoginModal() {
             }
 
             const email = `${user}@invoicereports.com`;
-
             try {
                 const credential = EmailAuthProvider.credential(email, password);
                 await linkWithCredential(auth.currentUser, credential);
@@ -296,10 +297,9 @@ function showLoginModal() {
                 resolve(false);
             }
         };
-        modal.querySelector('#modal-forgot-password').onclick = (e) => {
+        document.getElementById('modal-forgot-password').onclick = (e) => {
             e.preventDefault();
-            const errorDisplay = modal.querySelector('#modal-auth-error');
-            errorDisplay.textContent = 'Función no disponible para estos usuarios.';
+            document.getElementById('modal-auth-error').textContent = 'Función no disponible para estos usuarios.';
         };
     });
 }
@@ -307,11 +307,106 @@ function showLoginModal() {
 function setupModalListeners() {
     document.getElementById('modal-cancel-btn').addEventListener('click', () => {
         document.getElementById('generic-modal').classList.add('hidden');
-        if(modalResolve) modalResolve(false);
+        if (modalResolve) modalResolve(false);
+    });
+    // El botón de confirmar es manejado por el onsubmit del formulario dentro de showLoginModal
+}
+
+function setupCompanyManagementListeners() {
+    const addCompanyForm = document.getElementById('add-company-form');
+    const feedbackEl = document.getElementById('company-form-feedback');
+
+    addCompanyForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const companyNameInput = document.getElementById('new-company-name');
+        const companyName = companyNameInput.value.trim();
+        if (!companyName) return;
+
+        feedbackEl.textContent = 'Agregando...';
+        feedbackEl.style.color = 'inherit';
+
+        try {
+            const addCompanyCallable = httpsCallable(functions, 'addCompany');
+            await addCompanyCallable({ companyName, appId: firebaseConfig.appId });
+            feedbackEl.textContent = '¡Empresa agregada con éxito!';
+            feedbackEl.style.color = 'green';
+            companyNameInput.value = '';
+        } catch (error) {
+            console.error("Error al agregar empresa:", error);
+            feedbackEl.textContent = `Error: ${error.message}`;
+            feedbackEl.style.color = 'red';
+        }
+        setTimeout(() => feedbackEl.textContent = '', 3000);
     });
 
-    // El botón de confirmar es manejado por el onsubmit del formulario dentro de showLoginModal
-    document.getElementById('modal-confirm-btn').addEventListener('click', () => {
-         // No hacer nada aquí, la lógica está en el onsubmit
+    const listContainer = document.getElementById('company-list');
+    listContainer.addEventListener('click', async (e) => {
+        const companyItem = e.target.closest('.company-item');
+        if (!companyItem) return;
+
+        const oldName = companyItem.dataset.companyName;
+
+        if (e.target.classList.contains('edit-btn')) {
+            handleEditCompany(oldName);
+        } else if (e.target.classList.contains('delete-btn')) {
+            handleDeleteCompany(oldName);
+        }
+    });
+}
+
+async function handleEditCompany(oldName) {
+    const feedbackEl = document.getElementById('company-form-feedback');
+    const newName = prompt(`Editar nombre de la empresa "${oldName}":`, oldName);
+
+    if (newName && newName.trim() !== '' && newName.trim() !== oldName) {
+        feedbackEl.textContent = 'Actualizando...';
+        try {
+            const editCompanyCallable = httpsCallable(functions, 'editCompany');
+            await editCompanyCallable({ oldName, newName: newName.trim(), appId: firebaseConfig.appId });
+            feedbackEl.textContent = '¡Empresa actualizada!';
+            feedbackEl.style.color = 'green';
+        } catch (error) {
+            console.error("Error al editar empresa:", error);
+            feedbackEl.textContent = `Error: ${error.message}`;
+            feedbackEl.style.color = 'red';
+        }
+        setTimeout(() => feedbackEl.textContent = '', 3000);
+    }
+}
+
+async function handleDeleteCompany(companyName) {
+    const feedbackEl = document.getElementById('company-form-feedback');
+    if (confirm(`¿Estás seguro de que quieres eliminar la empresa "${companyName}"? Esta acción no se puede deshacer.`)) {
+        feedbackEl.textContent = 'Eliminando...';
+        try {
+            const deleteCompanyCallable = httpsCallable(functions, 'deleteCompany');
+            await deleteCompanyCallable({ companyName, appId: firebaseConfig.appId });
+            feedbackEl.textContent = '¡Empresa eliminada!';
+            feedbackEl.style.color = 'green';
+        } catch (error) {
+            console.error("Error al eliminar empresa:", error);
+            feedbackEl.textContent = `Error: ${error.message}`;
+            feedbackEl.style.color = 'red';
+        }
+        setTimeout(() => feedbackEl.textContent = '', 3000);
+    }
+}
+
+function renderCompanyList(companies) {
+    const listContainer = document.getElementById('company-list');
+    listContainer.innerHTML = companies.length ? '' : '<p class="text-xs text-gray-500 italic">No hay empresas registradas.</p>';
+
+    companies.forEach(company => {
+        const div = document.createElement('div');
+        div.className = 'company-item flex justify-between items-center p-2 bg-gray-50 rounded-lg';
+        div.dataset.companyName = company.name;
+        div.innerHTML = `
+            <span class="company-name">${company.name}</span>
+            <div>
+                <button class="edit-btn text-sm text-blue-600 hover:underline mr-2">Editar</button>
+                <button class="delete-btn text-sm text-red-600 hover:underline">Eliminar</button>
+            </div>
+        `;
+        listContainer.appendChild(div);
     });
 }
