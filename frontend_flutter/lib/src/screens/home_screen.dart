@@ -1,8 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:frontend_flutter/src/services/auth_service.dart';
 import 'package:frontend_flutter/src/widgets/company_management_widget.dart';
 import 'package:frontend_flutter/src/widgets/invoice_form_widget.dart';
 import 'package:frontend_flutter/src/widgets/report_widget.dart';
+import 'package:frontend_flutter/src/widgets/protected_route.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -17,9 +19,19 @@ class HomeScreen extends StatelessWidget {
         appBar: AppBar(
           title: const Text('Gestión de Facturas'),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: () => authService.signOut(),
+            StreamBuilder<User?>(
+              stream: authService.user,
+              builder: (context, snapshot) {
+                final user = snapshot.data;
+                if (user != null && !user.isAnonymous) {
+                  return IconButton(
+                    icon: const Icon(Icons.logout),
+                    onPressed: () => authService.signOut(),
+                  );
+                } else {
+                  return const SizedBox.shrink();
+                }
+              },
             ),
           ],
           bottom: const TabBar(
@@ -32,9 +44,9 @@ class HomeScreen extends StatelessWidget {
         ),
         body: const TabBarView(
           children: [
-            CompanyManagementWidget(),
+            ProtectedRoute(child: CompanyManagementWidget()),
             InvoiceFormWidget(),
-            ReportWidget(),
+            ProtectedRoute(child: ReportWidget()),
           ],
         ),
       ),
