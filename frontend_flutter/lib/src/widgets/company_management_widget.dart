@@ -17,7 +17,7 @@ class _CompanyManagementWidgetState extends State<CompanyManagementWidget> {
   @override
   void initState() {
     super.initState();
-    _companyService = CompanyService();
+    _companyService = CompanyService(DefaultFirebaseOptions.currentPlatform.appId);
   }
 
   void _addCompany() {
