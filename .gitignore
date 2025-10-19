@@ -15,3 +15,13 @@ yarn-error.log*
 # Archivos del sistema
 .DS_Store
 Thumbs.db
+
+# Flutter-specific ignores
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.dart_tool/
+build/
+
+# Ignore Firebase config file
+frontend_flutter/lib/firebase_options.dart
