@@ -8,20 +8,9 @@ class AuthService {
 
   Future<UserCredential?> signInWithUsernameAndPassword(String username, String password) async {
     try {
-      // Replicate the "dummy email" strategy
       final String email = '$username@invoicereports.com';
-
-      // First, sign in anonymously if there is no current user
-      if (_firebaseAuth.currentUser == null) {
-        await _firebaseAuth.signInAnonymously();
-      }
-
-      // Then, link the anonymous user with the email/password credential
-      final credential = EmailAuthProvider.credential(email: email, password: password);
-      return await _firebaseAuth.currentUser?.linkWithCredential(credential);
-
+      return await _firebaseAuth.signInWithEmailAndPassword(email: email, password: password);
     } on FirebaseAuthException catch (e) {
-      // Handle specific auth errors
       debugPrint(e.toString());
       return null;
     } catch (e) {
@@ -32,7 +21,5 @@ class AuthService {
 
   Future<void> signOut() async {
     await _firebaseAuth.signOut();
-    // After signing out, sign back in anonymously for basic read access
-    await _firebaseAuth.signInAnonymously();
   }
 }
