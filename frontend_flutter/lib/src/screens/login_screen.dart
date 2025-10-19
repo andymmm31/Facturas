@@ -10,7 +10,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _authService = AuthService();
 
@@ -24,8 +24,8 @@ class _LoginScreenState extends State<LoginScreen> {
         _errorMessage = '';
       });
 
-      final userCredential = await _authService.signInWithUsernameAndPassword(
-        _usernameController.text,
+      final userCredential = await _authService.signInWithEmailAndPassword(
+        _emailController.text,
         _passwordController.text,
       );
 
@@ -55,9 +55,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   Text('Iniciar Sesión', style: Theme.of(context).textTheme.headlineMedium),
                   const SizedBox(height: 20),
                   TextFormField(
-                    controller: _usernameController,
-                    decoration: const InputDecoration(labelText: 'Usuario', border: OutlineInputBorder()),
-                    validator: (value) => value!.isEmpty ? 'Por favor, introduce tu usuario' : null,
+                    controller: _emailController,
+                    decoration: const InputDecoration(labelText: 'Correo Electrónico', border: OutlineInputBorder()),
+                    validator: (value) => value!.isEmpty ? 'Por favor, introduce tu correo electrónico' : null,
                   ),
                   const SizedBox(height: 10),
                   TextFormField(
