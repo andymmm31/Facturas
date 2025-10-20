@@ -5,9 +5,10 @@ import 'package:frontend_flutter/src/widgets/company_management_widget.dart';
 import 'package:frontend_flutter/src/widgets/invoice_form_widget.dart';
 import 'package:frontend_flutter/src/widgets/report_widget.dart';
 import 'package:frontend_flutter/src/widgets/protected_route.dart';
+import 'package:frontend_flutter/src/widgets/change_password_widget.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -24,9 +25,18 @@ class HomeScreen extends StatelessWidget {
               builder: (context, snapshot) {
                 final user = snapshot.data;
                 if (user != null && !user.isAnonymous) {
-                  return IconButton(
-                    icon: const Icon(Icons.logout),
-                    onPressed: () => authService.signOut(),
+                  return Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.lock),
+                        tooltip: 'Cambiar contraseña',
+                        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ChangePasswordWidget())),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.logout),
+                        onPressed: () => authService.signOut(),
+                      ),
+                    ],
                   );
                 } else {
                   return const SizedBox.shrink();

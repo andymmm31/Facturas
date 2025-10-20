@@ -1,9 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 
 class CompanyService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseFunctions _functions = FirebaseFunctions.instance;
   final String appId;
 
   CompanyService(this.appId);
@@ -13,31 +11,62 @@ class CompanyService {
     return _firestore.collection('artifacts/$appId/public/data/companies').snapshots();
   }
 
-  // Function to add a new company
-  Future<void> addCompany(String companyName) async {
-    final HttpsCallable callable = _functions.httpsCallable('addCompany');
-    await callable.call(<String, dynamic>{
-      'companyName': companyName,
-      'appId': appId,
-    });
+  // Add a new company document under the configured collection.
+  // Returns the document path on success, or null on failure.
+  Future<String?> addCompany(String companyName) async {
+    try {
+      final docRef = await _firestore.collection('artifacts/$appId/public/data/companies').add({
+        'name': companyName,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      return docRef.path; // e.g. artifacts/{projectId}/public/data/companies/{docId}
+    } catch (e) {
+      // ignore: avoid_print
+      print('Error adding company: $e');
+      return null;
+    }
   }
 
-  // Function to edit a company's name
-  Future<void> editCompany(String oldName, String newName) async {
-    final HttpsCallable callable = _functions.httpsCallable('editCompany');
-    await callable.call(<String, dynamic>{
-      'oldName': oldName,
-      'newName': newName,
-      'appId': appId,
-    });
+  // Edit a company's name by finding the document with matching name and updating it.
+  Future<bool> editCompany(String oldName, String newName) async {
+    try {
+      final query = await _firestore
+          .collection('artifacts/$appId/public/data/companies')
+          .where('name', isEqualTo: oldName)
+          .limit(1)
+          .get();
+      if (query.docs.isEmpty) return false;
+      await query.docs.first.reference.update({'name': newName});
+      return true;
+    } catch (e) {
+      // ignore: avoid_print
+      print('Error editing company: $e');
+      return false;
+    }
   }
 
-  // Function to delete a company
-  Future<void> deleteCompany(String companyName) async {
-    final HttpsCallable callable = _functions.httpsCallable('deleteCompany');
-    await callable.call(<String, dynamic>{
-      'companyName': companyName,
-      'appId': appId,
-    });
+  // Delete a company by name (deletes first match).
+  Future<bool> deleteCompany(String companyName) async {
+    try {
+      final query = await _firestore
+          .collection('artifacts/$appId/public/data/companies')
+          .where('name', isEqualTo: companyName)
+          .limit(1)
+          .get();
+      if (query.docs.isEmpty) return false;
+      await query.docs.first.reference.delete();
+      return true;
+    } catch (e) {
+      // ignore: avoid_print
+      print('Error deleting company: $e');
+      return false;
+    }
+  }
+
+  /// One-shot read of company names. Useful if the stream is not delivering
+  /// (e.g. due to rules not deployed) — this lets the UI attempt a manual load.
+  Future<List<String>> getCompaniesOnce() async {
+    final snapshot = await _firestore.collection('artifacts/$appId/public/data/companies').get();
+    return snapshot.docs.map((d) => (d.data()['name'] as String?) ?? '').where((s) => s.isNotEmpty).toList();
   }
 }

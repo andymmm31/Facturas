@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:frontend_flutter/firebase_options.dart';
 import 'package:frontend_flutter/src/services/company_service.dart';
 import 'package:frontend_flutter/src/services/report_service.dart';
+import 'package:frontend_flutter/src/services/export_service.dart';
 import 'package:intl/intl.dart';
 
 class ReportWidget extends StatefulWidget {
-  const ReportWidget({Key? key}) : super(key: key);
+  const ReportWidget({super.key});
 
   @override
   _ReportWidgetState createState() => _ReportWidgetState();
@@ -17,10 +18,10 @@ class _ReportWidgetState extends State<ReportWidget> {
   late final CompanyService _companyService;
 
   Map<String, bool> _selectedCompanies = {};
-  String _filterType = 'range'; // 'range', 'invoiceDate', 'dueDate'
+  final String _filterType = 'range'; // 'range', 'invoiceDate', 'dueDate'
   DateTime? _startDate;
   DateTime? _endDate;
-  String _rangeType = 'invoiceDate'; // 'invoiceDate', 'dueDate', 'both'
+  final String _rangeType = 'invoiceDate'; // 'invoiceDate', 'dueDate', 'both'
 
   Map<String, dynamic>? _reportResult;
   bool _isLoading = false;
@@ -30,7 +31,7 @@ class _ReportWidgetState extends State<ReportWidget> {
     super.initState();
     final appId = DefaultFirebaseOptions.currentPlatform.appId;
     _reportService = ReportService(appId);
-    _companyService = CompanyService(appId);
+  _companyService = CompanyService(DefaultFirebaseOptions.currentPlatform.projectId);
   }
 
   Future<void> _selectDate(BuildContext context, bool isStart) async {
@@ -42,8 +43,11 @@ class _ReportWidgetState extends State<ReportWidget> {
     );
     if (picked != null) {
       setState(() {
-        if (isStart) _startDate = picked;
-        else _endDate = picked;
+        if (isStart) {
+          _startDate = picked;
+        } else {
+          _endDate = picked;
+        }
       });
     }
   }
@@ -101,9 +105,40 @@ class _ReportWidgetState extends State<ReportWidget> {
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _isLoading ? null : _calculateReport,
-              child: _isLoading ? const CircularProgressIndicator() : const Text('Calcular Total'),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _calculateReport,
+                    child: _isLoading ? const CircularProgressIndicator() : const Text('Calcular Total'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton(
+                  onPressed: () async {
+                    final projectId = DefaultFirebaseOptions.currentPlatform.projectId;
+                    final exportService = ExportService(projectId);
+                    final selected = _selectedCompanies.entries.where((e) => e.value).map((e) => e.key).toList();
+                    final result = await exportService.exportInvoicesToExcel(
+                      selectedCompanies: selected.isEmpty ? null : selected,
+                      startDate: _startDate?.toIso8601String().split('T').first,
+                      endDate: _endDate?.toIso8601String().split('T').first,
+                      rangeType: _rangeType,
+                    );
+                    if (result != null) {
+                      if (result.startsWith('ERROR:')) {
+                        print(result);
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result)));
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Exportado: $result')));
+                      }
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al exportar')));
+                    }
+                  },
+                  child: const Text('Exportar Reporte'),
+                ),
+              ],
             ),
           ),
         ],
@@ -166,6 +201,7 @@ class _ReportWidgetState extends State<ReportWidget> {
   Widget _buildResults() {
     final totalSum = _reportResult?['totalSum'] ?? 0.0;
     final invoiceCount = _reportResult?['invoiceCount'] ?? 0;
+    final invoices = (_reportResult?['invoices'] as List<dynamic>?) ?? <dynamic>[];
 
     return Container(
       width: double.infinity,
@@ -188,6 +224,37 @@ class _ReportWidgetState extends State<ReportWidget> {
               fontWeight: FontWeight.bold,
             ),
           ),
+          const SizedBox(height: 18),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Historial de facturas', style: Theme.of(context).textTheme.titleMedium),
+          ),
+          const SizedBox(height: 8),
+          invoices.isEmpty
+              ? const Text('No hay facturas para los filtros seleccionados.')
+              : SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    columns: const [
+                      DataColumn(label: Text('Empresa')),
+                      DataColumn(label: Text('Importe')),
+                      DataColumn(label: Text('Fecha factura')),
+                      DataColumn(label: Text('Fecha vencimiento')),
+                    ],
+                    rows: invoices.map((inv) {
+                      final company = inv['company']?.toString() ?? '';
+                      final amount = (inv['amount'] is num) ? (inv['amount'] as num).toDouble() : double.tryParse(inv['amount']?.toString() ?? '') ?? 0.0;
+                      final invoiceDate = inv['invoiceDate']?.toString() ?? '';
+                      final dueDate = inv['dueDate']?.toString() ?? '';
+                      return DataRow(cells: [
+                        DataCell(Text(company)),
+                        DataCell(Text('${amount.toStringAsFixed(2)} €')),
+                        DataCell(Text(invoiceDate)),
+                        DataCell(Text(dueDate)),
+                      ]);
+                    }).toList(),
+                  ),
+                ),
         ],
       ),
     );

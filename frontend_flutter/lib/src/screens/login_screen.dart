@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:frontend_flutter/src/services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   _LoginScreenState createState() => _LoginScreenState();
@@ -24,18 +24,22 @@ class _LoginScreenState extends State<LoginScreen> {
         _errorMessage = '';
       });
 
-      final userCredential = await _authService.signInWithUsernameAndPassword(
-        _usernameController.text,
+      final result = await _authService.signInWithUsernameAndPassword(
+        _usernameController.text.trim(),
         _passwordController.text,
       );
 
-      if (userCredential == null) {
+      if (result.credential != null) {
+        // Success: AuthWrapper or auth state listener will navigate away.
         setState(() {
-          _errorMessage = 'Credenciales incorrectas. Por favor, inténtalo de nuevo.';
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _errorMessage = result.errorMessage ?? 'Credenciales incorrectas. Por favor, inténtalo de nuevo.';
           _isLoading = false;
         });
       }
-      // On success, the AuthWrapper will handle navigation.
     }
   }
 
@@ -79,11 +83,48 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: _isLoading ? const CircularProgressIndicator() : const Text('Entrar'),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => _showForgotPasswordDialog(context),
+                    child: const Text('¿Olvidaste la contraseña?'),
+                  ),
                 ],
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _showForgotPasswordDialog(BuildContext context) {
+    final emailController = TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Restablecer contraseña'),
+        content: TextField(
+          controller: emailController,
+          decoration: const InputDecoration(labelText: 'Introduce tu correo'),
+          keyboardType: TextInputType.emailAddress,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () async {
+              final email = emailController.text.trim();
+              if (email.isEmpty) return;
+              Navigator.of(context).pop();
+              final msg = await _authService.sendPasswordResetEmail(email);
+              if (msg == null) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Email de restablecimiento enviado')));
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $msg')));
+              }
+            },
+            child: const Text('Enviar'),
+          ),
+        ],
       ),
     );
   }

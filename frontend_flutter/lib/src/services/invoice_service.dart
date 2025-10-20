@@ -8,26 +8,31 @@ class InvoiceService {
 
   InvoiceService(this.appId);
 
-  Future<void> addInvoice({
+  Future<String> addInvoice({
     required String company,
     required double amount,
     required DateTime invoiceDate,
     required DateTime dueDate,
   }) async {
     final User? currentUser = _auth.currentUser;
-    if (currentUser == null) {
-      throw Exception('No authenticated user found.');
-    }
 
     final collectionPath = 'artifacts/$appId/public/data/invoices';
-
-    await _firestore.collection(collectionPath).add({
+    final ref = await _firestore.collection(collectionPath).add({
       'company': company,
       'amount': amount,
       'invoiceDate': invoiceDate.toIso8601String().split('T').first, // Format as YYYY-MM-DD
       'dueDate': dueDate.toIso8601String().split('T').first,       // Format as YYYY-MM-DD
-      'userId': currentUser.uid,
+      'userId': currentUser?.uid ?? 'anonymous',
       'timestamp': FieldValue.serverTimestamp(),
     });
+
+    return ref.id;
+  }
+
+  Future<Map<String, dynamic>?> getInvoiceById(String id) async {
+    final collectionPath = 'artifacts/$appId/public/data/invoices';
+    final doc = await _firestore.collection(collectionPath).doc(id).get();
+    if (!doc.exists) return null;
+    return doc.data();
   }
 }

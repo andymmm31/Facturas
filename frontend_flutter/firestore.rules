@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /artifacts/{appId}/public/data/companies/{companyId} {
+      // Valida que el documento tiene sólo los campos permitidos y que el nombre es no vacío
+      function validCompany(data) {
+        return data.keys().hasOnly(['name', 'createdAt'])
+          && data.name is string
+          && data.name.size() > 0;
+      }
+
+  // Permitir lectura pública de empresas para que cualquier usuario (anónimo)
+  // pueda ver la lista y registrar facturas.
+  allow read: if true;
+
+      // Crear y actualizar: usuario autenticado y datos válidos
+      allow create: if request.auth != null && validCompany(request.resource.data);
+      allow update: if request.auth != null && validCompany(request.resource.data);
+
+      // Borrar: sólo usuarios autenticados
+      allow delete: if request.auth != null;
+    }
+    
+    // Permitimos que cualquiera (incluso anónimo) pueda crear facturas.
+    match /artifacts/{appId}/public/data/invoices/{invoiceId} {
+      // Lectura: solo autenticados (APPLY YOUR POLICY)
+      allow read: if request.auth != null;
+
+      // Escritura: permitimos creación sin autenticación para aceptar facturas públicas.
+      allow create: if true;
+
+      // Actualizar / borrar: solo autenticados para evitar manipulación masiva.
+      allow update, delete: if request.auth != null;
+    }
+  }
+}
