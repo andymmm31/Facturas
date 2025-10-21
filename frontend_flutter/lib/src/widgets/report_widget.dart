@@ -206,7 +206,7 @@ class _ReportWidgetState extends State<ReportWidget> {
 
   Widget _buildRangeTypeSelector() {
     return DropdownButtonFormField<String>(
-      value: _rangeType,
+      initialValue: _rangeType,
       decoration: const InputDecoration(labelText: 'Filtrar fechas por'),
       onChanged: (String? newValue) {
         if (newValue != null) {
