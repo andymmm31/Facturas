@@ -6,7 +6,9 @@ import 'package:frontend_flutter/src/services/invoice_service.dart';
 import 'package:intl/intl.dart';
 
 class InvoiceFormWidget extends StatefulWidget {
-  const InvoiceFormWidget({super.key});
+  final Map<String, dynamic>? invoice;
+
+  const InvoiceFormWidget({super.key, this.invoice});
 
   @override
   _InvoiceFormWidgetState createState() => _InvoiceFormWidgetState();
@@ -33,6 +35,7 @@ class _InvoiceFormWidgetState extends State<InvoiceFormWidget> {
   List<String>? _oneTimeCompanies;
   bool _triedOneShot = false;
   String? _oneShotError;
+  String? _invoiceId;
 
   @override
   void initState() {
@@ -40,17 +43,30 @@ class _InvoiceFormWidgetState extends State<InvoiceFormWidget> {
     final projectId = DefaultFirebaseOptions.currentPlatform.projectId;
     _invoiceService = InvoiceService(projectId);
     _companyService = CompanyService(projectId);
+
+    if (widget.invoice != null) {
+      _invoiceId = widget.invoice!['id'];
+      _amountController.text = widget.invoice!['amount']?.toString() ?? '';
+      _invoiceDateController.text = widget.invoice!['invoiceDate']?.toString() ?? '';
+      _dueDateController.text = widget.invoice!['dueDate']?.toString() ?? '';
+      _selectedCompany = widget.invoice!['company']?.toString();
+      if (_invoiceDateController.text.isNotEmpty) {
+        _selectedInvoiceDate = DateTime.tryParse(_invoiceDateController.text);
+      }
+      if (_dueDateController.text.isNotEmpty) {
+        _selectedDueDate = DateTime.tryParse(_dueDateController.text);
+      }
+    }
+
     _amountController.addListener(_validateForm);
     _invoiceDateController.addListener(_validateForm);
     _dueDateController.addListener(_validateForm);
     _companyController.addListener(_validateForm);
-    // Try one-shot load so anonymous users can see companies immediately
     _loadCompaniesOnce();
   }
 
   Future<void> _saveInvoice() async {
     if (!_formKey.currentState!.validate()) return;
-    // Validate dates: invoice date must not be after due date
     if (_selectedInvoiceDate == null || _selectedDueDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selecciona ambas fechas')));
       return;
@@ -62,35 +78,38 @@ class _InvoiceFormWidgetState extends State<InvoiceFormWidget> {
 
     setState(() => _isSaving = true);
     try {
-      final docId = await _invoiceService.addInvoice(
-        company: (_selectedCompany != null && _selectedCompany!.isNotEmpty) ? _selectedCompany! : _companyController.text,
-        amount: double.parse(_amountController.text.replaceAll(',', '.')),
-        invoiceDate: _selectedInvoiceDate!,
-        dueDate: _selectedDueDate!,
-      );
+      final invoiceData = {
+        'company': (_selectedCompany != null && _selectedCompany!.isNotEmpty) ? _selectedCompany! : _companyController.text,
+        'amount': double.parse(_amountController.text.replaceAll(',', '.')),
+        'invoiceDate': DateFormat('yyyy-MM-dd').format(_selectedInvoiceDate!),
+        'dueDate': DateFormat('yyyy-MM-dd').format(_selectedDueDate!),
+      };
 
-      // Try to read back the saved invoice to confirm persistence
-      final saved = await _invoiceService.getInvoiceById(docId);
-      debugPrint('Factura guardada, docId=$docId, data=$saved');
-
-      // Reset form only if saved successfully
-      _formKey.currentState!.reset();
-      _amountController.clear();
-      _invoiceDateController.clear();
-      _dueDateController.clear();
-      _companyController.clear();
-      setState(() {
-        _selectedCompany = null;
-      });
-
-      if (saved != null) {
-        final summary = '${saved['company'] ?? ''} - ${saved['amount'] ?? ''} € - ${saved['invoiceDate'] ?? ''}';
+      if (_invoiceId != null) {
+        await _invoiceService.updateInvoice(_invoiceId!, invoiceData);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Factura guardada: $summary')),
+          const SnackBar(content: Text('Factura actualizada con éxito')),
         );
+        Navigator.of(context).pop();
       } else {
+        final docId = await _invoiceService.addInvoice(
+          company: invoiceData['company'] as String,
+          amount: invoiceData['amount'] as double,
+          invoiceDate: _selectedInvoiceDate!,
+          dueDate: _selectedDueDate!,
+        );
+
+        _formKey.currentState!.reset();
+        _amountController.clear();
+        _invoiceDateController.clear();
+        _dueDateController.clear();
+        _companyController.clear();
+        setState(() {
+          _selectedCompany = null;
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Factura guardada (id: $docId) pero no se pudo leer')),
+          SnackBar(content: Text('Factura guardada: ${invoiceData['company']} - ${invoiceData['amount']} €')),
         );
       }
     } catch (e) {

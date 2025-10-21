@@ -35,4 +35,9 @@ class InvoiceService {
     if (!doc.exists) return null;
     return doc.data();
   }
+
+  Future<void> updateInvoice(String id, Map<String, dynamic> data) async {
+    final collectionPath = 'artifacts/$appId/public/data/invoices';
+    await _firestore.collection(collectionPath).doc(id).update(data);
+  }
 }
