@@ -4,6 +4,7 @@ import 'package:frontend_flutter/firebase_options.dart';
 import 'package:frontend_flutter/src/services/company_service.dart';
 import 'package:frontend_flutter/src/services/report_service.dart';
 import 'package:frontend_flutter/src/services/export_service.dart';
+import 'package:frontend_flutter/src/widgets/invoice_form_widget.dart';
 import 'package:intl/intl.dart';
 
 class ReportWidget extends StatefulWidget {
@@ -18,10 +19,9 @@ class _ReportWidgetState extends State<ReportWidget> {
   late final CompanyService _companyService;
 
   Map<String, bool> _selectedCompanies = {};
-  final String _filterType = 'range'; // 'range', 'invoiceDate', 'dueDate'
   DateTime? _startDate;
   DateTime? _endDate;
-  final String _rangeType = 'invoiceDate'; // 'invoiceDate', 'dueDate', 'both'
+  String _rangeType = 'invoiceDate'; // 'invoiceDate', 'dueDate', 'both'
 
   Map<String, dynamic>? _reportResult;
   bool _isLoading = false;
@@ -56,7 +56,6 @@ class _ReportWidgetState extends State<ReportWidget> {
     setState(() => _isLoading = true);
     final result = await _reportService.calculateReport(
       selectedCompanies: _selectedCompanies.entries.where((e) => e.value).map((e) => e.key).toList(),
-      filterType: _filterType,
       startDate: _startDate?.toIso8601String().split('T').first,
       endDate: _endDate?.toIso8601String().split('T').first,
       rangeType: _rangeType,
@@ -65,6 +64,12 @@ class _ReportWidgetState extends State<ReportWidget> {
       _reportResult = result;
       _isLoading = false;
     });
+
+    if (result.containsKey('error') && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${result['error']}')),
+      );
+    }
   }
 
   @override
@@ -100,8 +105,9 @@ class _ReportWidgetState extends State<ReportWidget> {
           const SizedBox(height: 10),
           _buildCompanySelector(),
           const SizedBox(height: 20),
-          // For simplicity, we are only implementing the 'range' filter type for now.
           _buildDateRangePicker(),
+          const SizedBox(height: 10),
+          _buildRangeTypeSelector(),
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
@@ -116,8 +122,8 @@ class _ReportWidgetState extends State<ReportWidget> {
                 const SizedBox(width: 10),
                 OutlinedButton(
                   onPressed: () async {
-                    final projectId = DefaultFirebaseOptions.currentPlatform.projectId;
-                    final exportService = ExportService(projectId);
+                    final appId = DefaultFirebaseOptions.currentPlatform.appId;
+                    final exportService = ExportService(appId);
                     final selected = _selectedCompanies.entries.where((e) => e.value).map((e) => e.key).toList();
                     final result = await exportService.exportInvoicesToExcel(
                       selectedCompanies: selected.isEmpty ? null : selected,
@@ -198,6 +204,32 @@ class _ReportWidgetState extends State<ReportWidget> {
     );
   }
 
+  Widget _buildRangeTypeSelector() {
+    return DropdownButtonFormField<String>(
+      value: _rangeType,
+      decoration: const InputDecoration(labelText: 'Filtrar fechas por'),
+      onChanged: (String? newValue) {
+        if (newValue != null) {
+          setState(() => _rangeType = newValue);
+        }
+      },
+      items: const [
+        DropdownMenuItem(
+          value: 'invoiceDate',
+          child: Text('Fecha de factura'),
+        ),
+        DropdownMenuItem(
+          value: 'dueDate',
+          child: Text('Fecha de vencimiento'),
+        ),
+        DropdownMenuItem(
+          value: 'both',
+          child: Text('Ambas fechas'),
+        ),
+      ],
+    );
+  }
+
   Widget _buildResults() {
     final totalSum = _reportResult?['totalSum'] ?? 0.0;
     final invoiceCount = _reportResult?['invoiceCount'] ?? 0;
@@ -240,6 +272,7 @@ class _ReportWidgetState extends State<ReportWidget> {
                       DataColumn(label: Text('Importe')),
                       DataColumn(label: Text('Fecha factura')),
                       DataColumn(label: Text('Fecha vencimiento')),
+                      DataColumn(label: Text('Acciones')),
                     ],
                     rows: invoices.map((inv) {
                       final company = inv['company']?.toString() ?? '';
@@ -251,6 +284,10 @@ class _ReportWidgetState extends State<ReportWidget> {
                         DataCell(Text('${amount.toStringAsFixed(2)} €')),
                         DataCell(Text(invoiceDate)),
                         DataCell(Text(dueDate)),
+                        DataCell(IconButton(
+                          icon: const Icon(Icons.edit),
+                          onPressed: () => _editInvoice(inv),
+                        )),
                       ]);
                     }).toList(),
                   ),
@@ -258,5 +295,18 @@ class _ReportWidgetState extends State<ReportWidget> {
         ],
       ),
     );
+  }
+
+  void _editInvoice(Map<String, dynamic> invoice) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(title: const Text('Editar factura')),
+          body: InvoiceFormWidget(invoice: invoice),
+        ),
+      ),
+    ).then((_) {
+      _calculateReport();
+    });
   }
 }

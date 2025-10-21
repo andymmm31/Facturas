@@ -103,38 +103,68 @@ exports.deleteCompany = functions.https.onCall(async (data, context) => {
 exports.calculateReport = functions.https.onCall(async (data, context) => {
     checkAuth(context);
 
-    const { appId, selectedCompanies, filterType, selectedDates, startDate, endDate, rangeType } = data;
-    const invoicesRef = db.collection(`artifacts/${appId}/public/data/invoices`);
-    let query = invoicesRef;
+    const { appId, selectedCompanies, startDate, endDate, rangeType } = data;
 
-    if (selectedCompanies && selectedCompanies.length > 0) {
-        query = query.where("company", "in", selectedCompanies);
+    if (!appId) {
+        throw new functions.https.HttpsError("invalid-argument", "El 'appId' es requerido.");
     }
 
+    const invoicesRef = db.collection(`artifacts/${appId}/public/data/invoices`);
+
     try {
-        const snapshot = await query.get();
-        let filteredInvoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        let invoicesData = [];
+        const hasDateRange = startDate || endDate;
 
-        if (filterType === 'range') {
-            if (startDate || endDate) {
-                filteredInvoices = filteredInvoices.filter(inv => {
-                    const invoiceDate = inv.invoiceDate;
-                    const dueDate = inv.dueDate;
-                    const checkInvoice = invoiceDate && (!startDate || invoiceDate >= startDate) && (!endDate || invoiceDate <= endDate);
-                    const checkDue = dueDate && (!startDate || dueDate >= startDate) && (!endDate || dueDate <= endDate);
-
-                    if (rangeType === 'invoiceDate') return checkInvoice;
-                    if (rangeType === 'dueDate') return checkDue;
-                    if (rangeType === 'both') return checkInvoice || checkDue;
-                    return true;
-                });
+        if (hasDateRange && (rangeType === 'invoiceDate' || rangeType === 'dueDate')) {
+            let query = invoicesRef;
+            if (startDate) {
+                query = query.where(rangeType, '>=', startDate);
             }
-        } else if (selectedDates && selectedDates.length > 0) {
-            const dateField = filterType === 'invoiceDate' ? 'invoiceDate' : 'dueDate';
-            filteredInvoices = filteredInvoices.filter(inv => selectedDates.includes(inv[dateField]));
+            if (endDate) {
+                query = query.where(rangeType, '<=', endDate);
+            }
+            const snapshot = await query.get();
+            invoicesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        } else if (hasDateRange && rangeType === 'both') {
+            const queries = [];
+            // Query for invoiceDate range
+            let invoiceDateQuery = invoicesRef;
+            if (startDate) invoiceDateQuery = invoiceDateQuery.where('invoiceDate', '>=', startDate);
+            if (endDate) invoiceDateQuery = invoiceDateQuery.where('invoiceDate', '<=', endDate);
+            queries.push(invoiceDateQuery.get());
+
+            // Query for dueDate range
+            let dueDateQuery = invoicesRef;
+            if (startDate) dueDateQuery = dueDateQuery.where('dueDate', '>=', startDate);
+            if (endDate) dueDateQuery = dueDateQuery.where('dueDate', '<=', endDate);
+            queries.push(dueDateQuery.get());
+
+            const [invoiceSnapshot, dueSnapshot] = await Promise.all(queries);
+
+            const invoiceMap = new Map();
+            invoiceSnapshot.docs.forEach(doc => invoiceMap.set(doc.id, { id: doc.id, ...doc.data() }));
+            dueSnapshot.docs.forEach(doc => invoiceMap.set(doc.id, { id: doc.id, ...doc.data() }));
+
+            invoicesData = Array.from(invoiceMap.values());
+        } else {
+            // No date filters. This will fetch all invoices.
+            // This is inefficient but matches old client-side behavior if companies > 10.
+            // A mandatory date range should be enforced on the client for performance.
+            const snapshot = await invoicesRef.get();
+            invoicesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         }
 
-        const totalSum = filteredInvoices.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+        // Post-filter by company in memory. This supports any number of companies.
+        let filteredInvoices = invoicesData;
+        if (selectedCompanies && selectedCompanies.length > 0) {
+            filteredInvoices = invoicesData.filter(inv => selectedCompanies.includes(inv.company));
+        }
+
+        const totalSum = filteredInvoices.reduce((sum, inv) => {
+            const amount = typeof inv.amount === 'number' ? inv.amount : parseFloat(inv.amount || 0);
+            return sum + (amount || 0);
+        }, 0);
 
         return {
             totalSum: totalSum,
@@ -143,6 +173,68 @@ exports.calculateReport = functions.https.onCall(async (data, context) => {
         };
     } catch (error) {
         console.error("Error al calcular el reporte:", error);
-        throw new functions.https.HttpsError("internal", "Ocurrió un error interno al procesar el reporte.");
+        throw new functions.https.HttpsError("internal", "Ocurrió un error interno al procesar el reporte.", error.message);
+    }
+});
+
+exports.exportInvoices = functions.https.onCall(async (data, context) => {
+    checkAuth(context);
+
+    const { appId, selectedCompanies, startDate, endDate, rangeType } = data;
+
+    if (!appId) {
+        throw new functions.https.HttpsError("invalid-argument", "El 'appId' es requerido.");
+    }
+
+    const invoicesRef = db.collection(`artifacts/${appId}/public/data/invoices`);
+
+    try {
+        let invoicesData = [];
+        const hasDateRange = startDate || endDate;
+
+        if (hasDateRange && (rangeType === 'invoiceDate' || rangeType === 'dueDate')) {
+            let query = invoicesRef;
+            if (startDate) {
+                query = query.where(rangeType, '>=', startDate);
+            }
+            if (endDate) {
+                query = query.where(rangeType, '<=', endDate);
+            }
+            const snapshot = await query.get();
+            invoicesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        } else if (hasDateRange && rangeType === 'both') {
+            const queries = [];
+            let invoiceDateQuery = invoicesRef;
+            if (startDate) invoiceDateQuery = invoiceDateQuery.where('invoiceDate', '>=', startDate);
+            if (endDate) invoiceDateQuery = invoiceDateQuery.where('invoiceDate', '<=', endDate);
+            queries.push(invoiceDateQuery.get());
+
+            let dueDateQuery = invoicesRef;
+            if (startDate) dueDateQuery = dueDateQuery.where('dueDate', '>=', startDate);
+            if (endDate) dueDateQuery = dueDateQuery.where('dueDate', '<=', endDate);
+            queries.push(dueDateQuery.get());
+
+            const [invoiceSnapshot, dueSnapshot] = await Promise.all(queries);
+
+            const invoiceMap = new Map();
+            invoiceSnapshot.docs.forEach(doc => invoiceMap.set(doc.id, { id: doc.id, ...doc.data() }));
+            dueSnapshot.docs.forEach(doc => invoiceMap.set(doc.id, { id: doc.id, ...doc.data() }));
+
+            invoicesData = Array.from(invoiceMap.values());
+        } else {
+            const snapshot = await invoicesRef.get();
+            invoicesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        }
+
+        let filteredInvoices = invoicesData;
+        if (selectedCompanies && selectedCompanies.length > 0) {
+            filteredInvoices = invoicesData.filter(inv => selectedCompanies.includes(inv.company));
+        }
+
+        return { invoices: filteredInvoices };
+    } catch (error) {
+        console.error("Error al exportar las facturas:", error);
+        throw new functions.https.HttpsError("internal", "Ocurrió un error al exportar las facturas.", error.message);
     }
 });
